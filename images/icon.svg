@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
+  <defs>
+    <linearGradient id="background" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1F2F42"/>
+      <stop offset="1" stop-color="#121C28"/>
+    </linearGradient>
+    <linearGradient id="index" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FF7A45"/>
+      <stop offset="1" stop-color="#E8482B"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="256" height="256" rx="52" fill="url(#background)"/>
+
+  <!-- working tree -->
+  <rect x="28" y="44" width="92" height="168" rx="14" fill="#33475E"/>
+  <rect x="44" y="68" width="60" height="12" rx="6" fill="#8FA3B8"/>
+  <rect x="44" y="96" width="42" height="12" rx="6" fill="#8FA3B8"/>
+  <rect x="44" y="122" width="60" height="12" rx="6" fill="#4CD08D"/>
+  <rect x="44" y="148" width="50" height="12" rx="6" fill="#8FA3B8"/>
+  <rect x="44" y="176" width="60" height="12" rx="6" fill="#8FA3B8"/>
+
+  <!-- index -->
+  <rect x="136" y="44" width="92" height="168" rx="14" fill="url(#index)"/>
+  <rect x="152" y="68" width="60" height="12" rx="6" fill="#FFFFFF"/>
+  <rect x="152" y="96" width="42" height="12" rx="6" fill="#FFFFFF"/>
+  <rect x="152" y="122" width="60" height="12" rx="6" fill="#FFFFFF"/>
+  <rect x="152" y="148" width="50" height="12" rx="6" fill="#FFFFFF"/>
+  <rect x="152" y="176" width="60" height="12" rx="6" fill="#FFFFFF"/>
+
+  <!-- the gutter arrow that moves a change into the index -->
+  <circle cx="128" cy="128" r="33" fill="#121C28"/>
+  <circle cx="128" cy="128" r="27" fill="#4CD08D"/>
+  <path d="M112 128H142M130 115l13 13-13 13" fill="none" stroke="#10241B" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

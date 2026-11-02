@@ -1,0 +1,374 @@
+{
+  "name": "git-index-editor",
+  "displayName": "Git Index Editor",
+  "description": "Edit the Git staging area directly: two-stage diffs (Working Tree ↔ Index, HEAD ↔ Index) whose Index side is a real, saveable editor.",
+  "version": "0.1.0",
+  "publisher": "myilmaz",
+  "license": "MIT",
+  "icon": "images/icon.png",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/yilmazmuhammed/vscode-git-index-editor.git"
+  },
+  "bugs": {
+    "url": "https://github.com/yilmazmuhammed/vscode-git-index-editor/issues"
+  },
+  "homepage": "https://github.com/yilmazmuhammed/vscode-git-index-editor#readme",
+  "engines": {
+    "vscode": "^1.100.0"
+  },
+  "categories": [
+    "SCM Providers",
+    "Other"
+  ],
+  "keywords": [
+    "git",
+    "index",
+    "staging",
+    "stage hunk",
+    "partial commit"
+  ],
+  "extensionKind": [
+    "workspace"
+  ],
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": false,
+      "description": "Runs Git, which can execute repository hooks and configured filters."
+    },
+    "virtualWorkspaces": false
+  },
+  "activationEvents": [
+    "onStartupFinished",
+    "onFileSystem:git-index",
+    "onFileSystem:git-head"
+  ],
+  "main": "./out/src/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "indexEditor.openUnstagedDiff",
+        "title": "Compare Working Tree with Index",
+        "category": "Git Index",
+        "icon": "$(git-compare)"
+      },
+      {
+        "command": "indexEditor.openStagedDiff",
+        "title": "Compare HEAD with Index",
+        "category": "Git Index",
+        "icon": "$(git-commit)"
+      },
+      {
+        "command": "indexEditor.switchDiff",
+        "title": "Switch Between Unstaged and Staged Diff",
+        "category": "Git Index",
+        "icon": "$(arrow-swap)"
+      },
+      {
+        "command": "indexEditor.stageChange",
+        "title": "Stage Hunk or Selected Lines",
+        "category": "Git Index",
+        "icon": "$(add)"
+      },
+      {
+        "command": "indexEditor.unstageChange",
+        "title": "Unstage Hunk or Selected Lines",
+        "category": "Git Index",
+        "icon": "$(remove)"
+      },
+      {
+        "command": "indexEditor.discardChange",
+        "title": "Discard Hunk or Selected Lines from Working Tree",
+        "category": "Git Index",
+        "icon": "$(discard)"
+      },
+      {
+        "command": "indexEditor.stageFile",
+        "title": "Stage File",
+        "category": "Git Index",
+        "icon": "$(add)"
+      },
+      {
+        "command": "indexEditor.unstageFile",
+        "title": "Unstage File",
+        "category": "Git Index",
+        "icon": "$(remove)"
+      },
+      {
+        "command": "indexEditor.discardFile",
+        "title": "Discard File Changes",
+        "category": "Git Index",
+        "icon": "$(discard)"
+      },
+      {
+        "command": "indexEditor.openFile",
+        "title": "Open File",
+        "category": "Git Index",
+        "icon": "$(go-to-file)"
+      },
+      {
+        "command": "indexEditor.stageAll",
+        "title": "Stage All Changes",
+        "category": "Git Index",
+        "icon": "$(add)"
+      },
+      {
+        "command": "indexEditor.unstageAll",
+        "title": "Unstage All Changes",
+        "category": "Git Index",
+        "icon": "$(remove)"
+      },
+      {
+        "command": "indexEditor.commit",
+        "title": "Commit",
+        "category": "Git Index",
+        "icon": "$(check)"
+      },
+      {
+        "command": "indexEditor.commitAmend",
+        "title": "Commit (Amend)",
+        "category": "Git Index"
+      },
+      {
+        "command": "indexEditor.refresh",
+        "title": "Refresh",
+        "category": "Git Index",
+        "icon": "$(refresh)"
+      }
+    ],
+    "menus": {
+      "commandPalette": [
+        {
+          "command": "indexEditor.stageChange",
+          "when": "indexEditor.activeDiff == unstaged && !diffEditorInlineMode"
+        },
+        {
+          "command": "indexEditor.unstageChange",
+          "when": "indexEditor.activeDiff == staged && !diffEditorInlineMode"
+        },
+        {
+          "command": "indexEditor.discardChange",
+          "when": "indexEditor.activeDiff == unstaged && !diffEditorInlineMode"
+        },
+        {
+          "command": "indexEditor.switchDiff",
+          "when": "indexEditor.activeDiff && !diffEditorInlineMode"
+        },
+        {
+          "command": "indexEditor.stageFile",
+          "when": "false"
+        },
+        {
+          "command": "indexEditor.unstageFile",
+          "when": "false"
+        },
+        {
+          "command": "indexEditor.discardFile",
+          "when": "false"
+        },
+        {
+          "command": "indexEditor.openFile",
+          "when": "false"
+        }
+      ],
+      "editor/title": [
+        {
+          "command": "indexEditor.stageChange",
+          "when": "indexEditor.activeDiff == unstaged && !diffEditorInlineMode",
+          "group": "navigation@1"
+        },
+        {
+          "command": "indexEditor.unstageChange",
+          "when": "indexEditor.activeDiff == staged && !diffEditorInlineMode",
+          "group": "navigation@1"
+        },
+        {
+          "command": "indexEditor.switchDiff",
+          "when": "indexEditor.activeDiff && !diffEditorInlineMode",
+          "group": "navigation@2"
+        },
+        {
+          "command": "indexEditor.openUnstagedDiff",
+          "when": "resourceScheme == file && !isInDiffEditor && indexEditor.hasRepository",
+          "group": "1_diff@1"
+        },
+        {
+          "command": "indexEditor.openStagedDiff",
+          "when": "resourceScheme == file && !isInDiffEditor && indexEditor.hasRepository",
+          "group": "1_diff@2"
+        }
+      ],
+      "editor/context": [
+        {
+          "command": "indexEditor.stageChange",
+          "when": "indexEditor.activeDiff == unstaged && !diffEditorInlineMode",
+          "group": "1_indexEditor@1"
+        },
+        {
+          "command": "indexEditor.discardChange",
+          "when": "indexEditor.activeDiff == unstaged && !diffEditorInlineMode",
+          "group": "1_indexEditor@2"
+        },
+        {
+          "command": "indexEditor.unstageChange",
+          "when": "indexEditor.activeDiff == staged && !diffEditorInlineMode",
+          "group": "1_indexEditor@1"
+        }
+      ],
+      "explorer/context": [
+        {
+          "command": "indexEditor.openUnstagedDiff",
+          "when": "!explorerResourceIsFolder && indexEditor.hasRepository",
+          "group": "3_compare@10"
+        },
+        {
+          "command": "indexEditor.openStagedDiff",
+          "when": "!explorerResourceIsFolder && indexEditor.hasRepository",
+          "group": "3_compare@11"
+        }
+      ],
+      "scm/title": [
+        {
+          "command": "indexEditor.commit",
+          "when": "scmProvider == indexEditor",
+          "group": "navigation@1"
+        },
+        {
+          "command": "indexEditor.refresh",
+          "when": "scmProvider == indexEditor",
+          "group": "navigation@2"
+        },
+        {
+          "command": "indexEditor.commitAmend",
+          "when": "scmProvider == indexEditor",
+          "group": "1_commit@1"
+        }
+      ],
+      "scm/resourceGroup/context": [
+        {
+          "command": "indexEditor.stageAll",
+          "when": "scmProvider == indexEditor && scmResourceGroup == unstaged",
+          "group": "inline"
+        },
+        {
+          "command": "indexEditor.unstageAll",
+          "when": "scmProvider == indexEditor && scmResourceGroup == staged",
+          "group": "inline"
+        }
+      ],
+      "scm/resourceState/context": [
+        {
+          "command": "indexEditor.openFile",
+          "when": "scmProvider == indexEditor",
+          "group": "inline@1"
+        },
+        {
+          "command": "indexEditor.discardFile",
+          "when": "scmProvider == indexEditor && scmResourceGroup == unstaged",
+          "group": "inline@2"
+        },
+        {
+          "command": "indexEditor.stageFile",
+          "when": "scmProvider == indexEditor && scmResourceGroup == unstaged",
+          "group": "inline@3"
+        },
+        {
+          "command": "indexEditor.stageFile",
+          "when": "scmProvider == indexEditor && scmResourceGroup == conflicts",
+          "group": "inline@3"
+        },
+        {
+          "command": "indexEditor.unstageFile",
+          "when": "scmProvider == indexEditor && scmResourceGroup == staged",
+          "group": "inline@3"
+        },
+        {
+          "command": "indexEditor.openUnstagedDiff",
+          "when": "scmProvider == git",
+          "group": "navigation@90"
+        },
+        {
+          "command": "indexEditor.openStagedDiff",
+          "when": "scmProvider == git",
+          "group": "navigation@91"
+        }
+      ]
+    },
+    "keybindings": [
+      {
+        "command": "indexEditor.stageChange",
+        "key": "ctrl+k ctrl+alt+s",
+        "mac": "cmd+k cmd+alt+s",
+        "when": "indexEditor.activeDiff == unstaged && !diffEditorInlineMode"
+      },
+      {
+        "command": "indexEditor.unstageChange",
+        "key": "ctrl+k ctrl+alt+s",
+        "mac": "cmd+k cmd+alt+s",
+        "when": "indexEditor.activeDiff == staged && !diffEditorInlineMode"
+      },
+      {
+        "command": "indexEditor.switchDiff",
+        "key": "ctrl+k ctrl+alt+d",
+        "mac": "cmd+k cmd+alt+d",
+        "when": "indexEditor.activeDiff && !diffEditorInlineMode"
+      }
+    ],
+    "configurationDefaults": {
+      "diffEditor.renderSideBySide": true,
+      "diffEditor.useInlineViewWhenSpaceIsLimited": false
+    },
+    "configuration": {
+      "title": "Git Index Editor",
+      "properties": {
+        "indexEditor.unstagedDiffLayout": {
+          "type": "string",
+          "enum": [
+            "indexRight",
+            "indexLeft"
+          ],
+          "enumDescriptions": [
+            "Working tree on the left, Index on the right. The diff gutter's arrow copies a block into the Index, so it stages. Your new lines appear on the red side.",
+            "Index on the left, working tree on the right. New lines appear green as usual, but the gutter arrow changes the working tree instead of the Index."
+          ],
+          "default": "indexRight",
+          "description": "Side of the Working Tree ↔ Index diff that shows the Index."
+        }
+      }
+    },
+    "resourceLabelFormatters": [
+      {
+        "scheme": "git-index",
+        "formatting": {
+          "label": "${path} (Index)",
+          "separator": "/",
+          "stripPathStartingSeparator": true
+        }
+      },
+      {
+        "scheme": "git-head",
+        "formatting": {
+          "label": "${path} (HEAD)",
+          "separator": "/",
+          "stripPathStartingSeparator": true
+        }
+      }
+    ]
+  },
+  "scripts": {
+    "compile": "tsc -p .",
+    "watch": "tsc -p . --watch",
+    "test:unit": "npm run compile && node --test \"out/test/unit/*.test.js\"",
+    "test:integration": "npm run compile && node out/test/integration/runTest.js",
+    "test": "npm run test:unit && npm run test:integration",
+    "vscode:prepublish": "npm run compile",
+    "package": "vsce package"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "@types/vscode": "~1.100.0",
+    "@vscode/test-electron": "^2.5.2",
+    "@vscode/vsce": "^3.3.2",
+    "typescript": "^5.8.3"
+  }
+}
