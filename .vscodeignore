@@ -1,5 +1,6 @@
 .vscode/**
 .vscode-test/**
+.github/**
 node_modules/**
 src/**
 test/**
@@ -7,6 +8,6 @@ out/test/**
 **/*.map
 **/*.ts
 tsconfig.json
-images/*.svg
+images/icon.svg
 .gitignore
 *.vsix

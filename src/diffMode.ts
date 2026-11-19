@@ -4,7 +4,7 @@ const SECTION = 'diffEditor';
 const SETTING = 'renderSideBySide';
 
 /**
- * The extension works only in side-by-side diffs. An inline diff has no Index pane to edit
+ * The Index editors work only in side-by-side diffs. An inline diff has no Index pane to edit
  * and no gutter arrow to stage with, so while inline is on the Index stays read-only.
  */
 export function isInlineDiff(): boolean {
@@ -24,9 +24,9 @@ export async function ensureSideBySide(): Promise<boolean> {
 	if (!isInlineDiff()) {
 		return true;
 	}
-	const useSideBySide = 'Use Side-by-Side';
+	const useSideBySide = vscode.l10n.t('Use Side-by-Side');
 	const answer = await vscode.window.showInformationMessage(
-		'Git Index Editor works only in the side-by-side diff view.',
+		vscode.l10n.t('The Index can be edited only in the side-by-side diff view.'),
 		useSideBySide
 	);
 	if (answer === useSideBySide) {

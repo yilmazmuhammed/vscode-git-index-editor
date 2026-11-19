@@ -1,12 +1,38 @@
 import * as assert from 'assert';
 import { execFileSync } from 'child_process';
 import * as fs from 'fs';
+import * as os from 'os';
 import * as path from 'path';
 import * as vscode from 'vscode';
-import type { Repository, RepositoryManager } from '../../src/repository';
+import type { ExtensionApi } from '../../src/extension';
+import type { Repository } from '../../src/repository';
+import type { Entry, Node } from '../../src/staging/entries';
+import { baseRefOf } from '../../src/uris';
 
 const root = vscode.workspace.workspaceFolders![0].uri.fsPath;
-const git = (...args: string[]) => execFileSync('git', args, { cwd: root, encoding: 'utf8' });
+
+const git = (...args: string[]) => execFileSync('git', args, { cwd: root, encoding: 'utf8', stdio: 'pipe' });
+
+/**
+ * For commands that rewrite .git/config. The built-in Git extension reads that file in this same
+ * extension host when it changes, and on Windows a file that is open cannot be replaced. So retry,
+ * and wait asynchronously, letting the extension host finish its read in the meantime.
+ */
+async function gitConfig(...args: string[]): Promise<void> {
+	for (let attempt = 0; ; attempt++) {
+		try {
+			git(...args);
+			return;
+		} catch (error) {
+			const stderr = String((error as { stderr?: unknown }).stderr ?? '');
+			if (attempt >= 30 || !/could not (write|lock) config file|Permission denied/.test(stderr)) {
+				throw error;
+			}
+			await sleep(100);
+		}
+	}
+}
+
 const indexOf = (file: string) => git('show', `:${file}`);
 const headOf = (file: string) => git('show', `HEAD:${file}`);
 const uriOf = (file: string) => vscode.Uri.file(path.join(root, file));
@@ -31,6 +57,7 @@ function commitAll(file: string, content: string): void {
 }
 
 const sideEditor = (scheme: string) => vscode.window.visibleTextEditors.find(editor => editor.document.uri.scheme === scheme);
+const activeDiffInput = () => vscode.window.tabGroups.activeTabGroup.activeTab?.input as vscode.TabInputTextDiff | undefined;
 
 async function openedDiff(command: string, file: string): Promise<void> {
 	await vscode.commands.executeCommand('workbench.action.closeAllEditors');
@@ -60,28 +87,141 @@ async function setInline(inline: boolean): Promise<void> {
 		.update('renderSideBySide', inline ? false : undefined, vscode.ConfigurationTarget.Global);
 }
 
-const tests: [string, (repository: Repository) => Promise<void>][] = [
-	['SCM groups separate unstaged and staged changes of the same file', async repository => {
+interface Context {
+	readonly extension: ExtensionApi;
+	readonly repository: Repository;
+}
+
+/** Makes the built-in Git extension and the Staging view catch up with changes made on the command line. */
+async function synced({ extension, repository }: Context): Promise<void> {
+	await repository.refresh();
+	extension.staging.update();
+}
+
+const names = (entries: readonly Entry[]) => entries.map(entry => entry.path).sort();
+const fileNode = (entry: Entry): Node => ({ type: 'file', entry });
+const find = (context: Context, list: Entry['list'], file: string) =>
+	context.extension.staging.entries(list).find(entry => entry.path === file);
+
+const tests: [string, (context: Context) => Promise<void>][] = [
+	['the Staging view lists unstaged and staged changes of the same file', async context => {
 		commitAll('groups.txt', 'one\n');
 		write('groups.txt', 'one\ntwo\n');
 		git('add', 'groups.txt');
 		write('groups.txt', 'one\ntwo\nthree\n');
 		write('untracked.txt', 'new\n');
-		await repository.refresh();
-		const names = (group: vscode.SourceControlResourceGroup) =>
-			group.resourceStates.map(state => path.basename(state.resourceUri.fsPath)).sort();
-		assert.deepStrictEqual(names(repository.unstaged), ['groups.txt', 'untracked.txt']);
-		assert.deepStrictEqual(names(repository.staged), ['groups.txt']);
+		await synced(context);
+		const { staging } = context.extension;
+		assert.deepStrictEqual(names(staging.entries('unstaged')), ['groups.txt', 'untracked.txt']);
+		assert.deepStrictEqual(names(staging.entries('staged')), ['groups.txt']);
+		assert.strictEqual(find(context, 'unstaged', 'groups.txt')?.partial, true);
+		assert.strictEqual(find(context, 'unstaged', 'untracked.txt')?.kind, 'untracked');
+		assert.strictEqual(staging.views.unstaged.title, 'Unstaged Changes (2)');
+
+		await vscode.workspace.getConfiguration('indexEditor.staging').update('showUntracked', false, vscode.ConfigurationTarget.Global);
+		try {
+			await until('untracked files are hidden', () => !find(context, 'unstaged', 'untracked.txt'));
+		} finally {
+			await vscode.workspace.getConfiguration('indexEditor.staging').update('showUntracked', undefined, vscode.ConfigurationTarget.Global);
+		}
 		git('reset', '-q', 'groups.txt');
 		git('checkout', '--', 'groups.txt');
 		fs.unlinkSync(path.join(root, 'untracked.txt'));
+		await synced(context);
+	}],
+
+	['the filter narrows both lists and the titles count what is shown', async context => {
+		write('one.md', 'a\n');
+		write('two.txt', 'b\n');
+		await synced(context);
+		const { staging } = context.extension;
+		staging.setFilter('*.md');
+		try {
+			assert.strictEqual(staging.views.unstaged.title, 'Unstaged Changes (1/2)');
+			assert.strictEqual(staging.views.staged.title, 'Staged Changes (0/0)');
+		} finally {
+			staging.setFilter('');
+		}
+		assert.strictEqual(staging.views.unstaged.title, 'Unstaged Changes (2)');
+		fs.unlinkSync(path.join(root, 'one.md'));
+		fs.unlinkSync(path.join(root, 'two.txt'));
+		await synced(context);
+	}],
+
+	['Staging commands and drag and drop stage and unstage files', async context => {
+		commitAll('scm.txt', 'a\n');
+		write('scm.txt', 'b\n');
+		await synced(context);
+		const unstaged = find(context, 'unstaged', 'scm.txt')!;
+		await vscode.commands.executeCommand('indexEditor.stageFile', fileNode(unstaged));
+		assert.strictEqual(indexOf('scm.txt'), 'b\n');
+		await synced(context);
+		const staged = find(context, 'staged', 'scm.txt')!;
+		await vscode.commands.executeCommand('indexEditor.unstageFile', fileNode(staged), [fileNode(staged)]);
+		assert.strictEqual(indexOf('scm.txt'), 'a\n');
+
+		await context.extension.staging.drop('staged', [unstaged]);
+		assert.strictEqual(indexOf('scm.txt'), 'b\n');
+		await context.extension.staging.drop('unstaged', [staged]);
+		assert.strictEqual(indexOf('scm.txt'), 'a\n');
+		git('checkout', '--', 'scm.txt');
+		await synced(context);
+	}],
+
+	['the 0.1.0 file commands still take file URIs', async context => {
+		commitAll('legacy.txt', 'a\n');
+		write('legacy.txt', 'b\n');
+		write('legacy-new.txt', 'new\n');
+		await synced(context);
+		await vscode.commands.executeCommand('indexEditor.stageFile', uriOf('legacy.txt'), [uriOf('legacy.txt'), uriOf('legacy-new.txt')]);
+		assert.strictEqual(indexOf('legacy.txt'), 'b\n');
+		assert.strictEqual(indexOf('legacy-new.txt'), 'new\n');
+		await vscode.commands.executeCommand('indexEditor.unstageFile', uriOf('legacy.txt'));
+		assert.strictEqual(indexOf('legacy.txt'), 'a\n');
+		await vscode.commands.executeCommand('indexEditor.openFile', uriOf('legacy.txt'));
+		await until('the file opens', () => vscode.window.activeTextEditor?.document.uri.fsPath === uriOf('legacy.txt').fsPath);
+		const commands = await vscode.commands.getCommands(true);
+		for (const id of ['stageFile', 'unstageFile', 'discardFile', 'openFile', 'stageAll', 'unstageAll', 'refresh', 'commit', 'commitAmend',
+			'openUnstagedDiff', 'openStagedDiff', 'switchDiff', 'stageChange', 'unstageChange', 'discardChange']) {
+			assert.ok(commands.includes(`indexEditor.${id}`), `indexEditor.${id} is registered`);
+		}
+		git('reset', '-q');
+		git('checkout', '--', 'legacy.txt');
+		fs.unlinkSync(path.join(root, 'legacy-new.txt'));
+		await synced(context);
+	}],
+
+	['Ignore writes the file to the .gitignore of its folder', async context => {
+		fs.mkdirSync(path.join(root, 'build'), { recursive: true });
+		write('build/out.log', 'log\n');
+		await synced(context);
+		const entry = find(context, 'unstaged', 'build/out.log')!;
+		await vscode.commands.executeCommand('indexEditor.staging.ignore', fileNode(entry));
+		assert.strictEqual(read('build/.gitignore'), '/out.log\n');
+		await synced(context);
+		assert.ok(!find(context, 'unstaged', 'build/out.log'));
+		fs.rmSync(path.join(root, 'build'), { recursive: true });
+		await synced(context);
+	}],
+
+	['Assume Unchanged hides a file until it is cleared', async context => {
+		commitAll('assumed.txt', 'a\n');
+		write('assumed.txt', 'b\n');
+		await synced(context);
+		await vscode.commands.executeCommand('indexEditor.staging.assumeUnchanged', fileNode(find(context, 'unstaged', 'assumed.txt')!));
+		await synced(context);
+		assert.ok(!find(context, 'unstaged', 'assumed.txt'));
+		assert.match(git('ls-files', '-v', 'assumed.txt'), /^h /);
+		git('update-index', '--no-assume-unchanged', 'assumed.txt');
+		git('checkout', '--', 'assumed.txt');
+		await synced(context);
 	}],
 
 	['saving the Index side of the unstaged diff updates only the Index', async () => {
 		commitAll('save.txt', 'head\n');
 		write('save.txt', 'working tree\n');
 		await openedDiff('indexEditor.openUnstagedDiff', 'save.txt');
-		const input = vscode.window.tabGroups.activeTabGroup.activeTab!.input as vscode.TabInputTextDiff;
+		const input = activeDiffInput()!;
 		assert.strictEqual(input.original.scheme, 'file');
 		assert.strictEqual(input.modified.scheme, 'git-index');
 
@@ -106,15 +246,16 @@ const tests: [string, (repository: Repository) => Promise<void>][] = [
 		assert.strictEqual(read('save.txt'), 'left working tree\n');
 	}],
 
-	['the staged diff edits the Index and keeps HEAD read-only', async () => {
+	['the staged diff edits the Index against a read-only HEAD', async () => {
 		await openedDiff('indexEditor.openStagedDiff', 'save.txt');
-		const input = vscode.window.tabGroups.activeTabGroup.activeTab!.input as vscode.TabInputTextDiff;
-		assert.strictEqual(input.original.scheme, 'git-head');
+		const input = activeDiffInput()!;
+		assert.strictEqual(input.original.scheme, 'git');
+		assert.strictEqual(baseRefOf(input.original), 'HEAD');
 		assert.strictEqual(input.modified.scheme, 'git-index');
 
 		await typeInto('workbench.action.compareEditor.focusSecondarySide', 'nope ');
-		assert.strictEqual(sideEditor('git-head')!.document.getText(), 'head\n');
-		assert.strictEqual(sideEditor('git-head')!.document.isDirty, false);
+		assert.strictEqual(sideEditor('git')!.document.getText(), 'head\n');
+		assert.strictEqual(sideEditor('git')!.document.isDirty, false);
 
 		await typeInto('workbench.action.compareEditor.focusPrimarySide', 'more ');
 		const index = sideEditor('git-index')!.document;
@@ -124,21 +265,22 @@ const tests: [string, (repository: Repository) => Promise<void>][] = [
 		assert.strictEqual(read('save.txt'), 'left working tree\n');
 	}],
 
-	['the indexLeft layout keeps the Index editable on the original side', async () => {
-		const config = vscode.workspace.getConfiguration('indexEditor');
-		await config.update('unstagedDiffLayout', 'indexLeft', vscode.ConfigurationTarget.Global);
-		try {
-			await openedDiff('indexEditor.openUnstagedDiff', 'save.txt');
-			const input = vscode.window.tabGroups.activeTabGroup.activeTab!.input as vscode.TabInputTextDiff;
-			assert.strictEqual(input.original.scheme, 'git-index');
-			await typeInto('workbench.action.compareEditor.focusSecondarySide', 'L ');
-			const index = sideEditor('git-index')!.document;
-			assert.strictEqual(index.getText(), 'L more typed head\n');
-			await index.save();
-			assert.strictEqual(indexOf('save.txt'), 'L more typed head\n');
-		} finally {
-			await config.update('unstagedDiffLayout', undefined, vscode.ConfigurationTarget.Global);
-		}
+	['the staged diff of a new file shows an empty base and still counts as staged', async () => {
+		write('brand-new.txt', 'fresh\n');
+		git('add', 'brand-new.txt');
+		await openedDiff('indexEditor.openStagedDiff', 'brand-new.txt');
+		const input = activeDiffInput()!;
+		assert.strictEqual(input.original.scheme, 'git-index-empty');
+		assert.strictEqual(baseRefOf(input.original), 'HEAD');
+		assert.strictEqual(sideEditor('git-index-empty')!.document.getText(), '');
+		assert.strictEqual(sideEditor('git-index')!.document.getText(), 'fresh\n');
+
+		await vscode.commands.executeCommand('workbench.action.compareEditor.focusPrimarySide');
+		select(sideEditor('git-index')!, 0);
+		await vscode.commands.executeCommand('indexEditor.unstageChange');
+		assert.strictEqual(indexOf('brand-new.txt'), '', 'unstaging the only hunk leaves the file empty in the Index');
+		git('rm', '-q', '-f', '--cached', 'brand-new.txt');
+		fs.unlinkSync(path.join(root, 'brand-new.txt'));
 	}],
 
 	['stageChange takes only the hunk under the cursor', async () => {
@@ -176,6 +318,15 @@ const tests: [string, (repository: Repository) => Promise<void>][] = [
 		await vscode.commands.executeCommand('indexEditor.unstageChange');
 		assert.strictEqual(indexOf('unstage.txt'), '1\n2\n3\n4\n5\n6\nseven\n');
 		assert.strictEqual(read('unstage.txt'), 'one\n2\n3\n4\n5\n6\nseven\n');
+	}],
+
+	['resetIndexToBase and stageWholeFile work on the file of the active diff', async () => {
+		await openedDiff('indexEditor.openStagedDiff', 'unstage.txt');
+		await vscode.commands.executeCommand('indexEditor.resetIndexToBase');
+		assert.strictEqual(indexOf('unstage.txt'), '1\n2\n3\n4\n5\n6\n7\n');
+		await openedDiff('indexEditor.openUnstagedDiff', 'unstage.txt');
+		await vscode.commands.executeCommand('indexEditor.stageWholeFile');
+		assert.strictEqual(indexOf('unstage.txt'), 'one\n2\n3\n4\n5\n6\nseven\n');
 	}],
 
 	['stageChange joins unsaved Index edits instead of overwriting them', async () => {
@@ -222,7 +373,7 @@ const tests: [string, (repository: Repository) => Promise<void>][] = [
 
 	['autocrlf: staging from a CRLF working tree keeps LF in the Index', async () => {
 		commitAll('crlf.txt', 'a\nb\nc\nd\ne\n');
-		git('config', 'core.autocrlf', 'true');
+		await gitConfig('config', 'core.autocrlf', 'true');
 		try {
 			write('crlf.txt', 'a\r\nb\r\nc\r\nd\r\nE\r\n');
 			await openedDiff('indexEditor.openUnstagedDiff', 'crlf.txt');
@@ -231,11 +382,11 @@ const tests: [string, (repository: Repository) => Promise<void>][] = [
 			await vscode.commands.executeCommand('indexEditor.stageChange');
 			assert.strictEqual(indexOf('crlf.txt'), 'a\nb\nc\nd\nE\n');
 		} finally {
-			git('config', 'core.autocrlf', 'false');
+			await gitConfig('config', 'core.autocrlf', 'false');
 		}
 	}],
 
-	['an open Index document follows changes made outside the editor', async repository => {
+	['an open Index document follows changes made outside the editor', async context => {
 		commitAll('outside.txt', 'old\n');
 		write('outside.txt', 'new\n');
 		await openedDiff('indexEditor.openUnstagedDiff', 'outside.txt');
@@ -243,8 +394,7 @@ const tests: [string, (repository: Repository) => Promise<void>][] = [
 		assert.strictEqual(index.getText(), 'old\n');
 		git('add', 'outside.txt');
 		await until('the Index document reloads', () => index.getText() === 'new\n');
-		await until('the file leaves the unstaged group', () =>
-			!repository.unstaged.resourceStates.some(state => state.resourceUri.fsPath.endsWith('outside.txt')));
+		await until('the file leaves the unstaged list', () => !find(context, 'unstaged', 'outside.txt'));
 	}],
 
 	['a file deleted from the working tree can be compared with the Index', async () => {
@@ -252,22 +402,49 @@ const tests: [string, (repository: Repository) => Promise<void>][] = [
 		fs.unlinkSync(path.join(root, 'deleted.txt'));
 		await openedDiff('indexEditor.openUnstagedDiff', 'deleted.txt');
 		assert.strictEqual(sideEditor('git-index')!.document.getText(), 'still here\n');
-		assert.strictEqual(sideEditor('git-head')!.document.getText(), '');
+		assert.strictEqual(sideEditor('git-index-empty')!.document.getText(), '');
 		git('checkout', '--', 'deleted.txt');
 	}],
 
 	['switchDiff moves between the two diffs of a file', async () => {
 		await openedDiff('indexEditor.openUnstagedDiff', 'save.txt');
 		await vscode.commands.executeCommand('indexEditor.switchDiff');
-		await until('the staged diff is active', () => {
-			const input = vscode.window.tabGroups.activeTabGroup.activeTab!.input as vscode.TabInputTextDiff;
-			return input.original.scheme === 'git-head';
-		});
+		await until('the staged diff is active', () => activeDiffInput()?.original.scheme === 'git');
 		await vscode.commands.executeCommand('indexEditor.switchDiff');
-		await until('the unstaged diff is active', () => {
-			const input = vscode.window.tabGroups.activeTabGroup.activeTab!.input as vscode.TabInputTextDiff;
-			return input.original.scheme === 'file';
-		});
+		await until('the unstaged diff is active', () => activeDiffInput()?.original.scheme === 'file');
+	}],
+
+	['the staged diff compares with the upstream branch when chosen, and the title button switches back', async context => {
+		const remote = fs.mkdtempSync(path.join(fs.realpathSync.native(os.tmpdir()), 'egit-it-remote-'));
+		execFileSync('git', ['init', '-q', '--bare', remote]);
+		await gitConfig('remote', 'add', 'origin', remote);
+		commitAll('upstream.txt', 'remote\n');
+		await gitConfig('push', '-q', '-u', 'origin', 'main');
+		write('upstream.txt', 'local\n');
+		git('commit', '-q', '-am', 'local only');
+		write('upstream.txt', 'staged\n');
+		git('add', 'upstream.txt');
+		await synced(context);
+		await until('the upstream is known', () => context.repository.api.state.HEAD?.upstream?.name === 'main');
+
+		const config = vscode.workspace.getConfiguration('indexEditor.staging');
+		await config.update('stagedCompareBase', 'upstream', vscode.ConfigurationTarget.Global);
+		try {
+			await openedDiff('indexEditor.openStagedDiff', 'upstream.txt');
+			assert.strictEqual(baseRefOf(activeDiffInput()!.original), 'refs/remotes/origin/main');
+			await until('the upstream content loads', () => sideEditor('git')?.document.getText() === 'remote\n');
+
+			await vscode.commands.executeCommand('indexEditor.resetIndexToBase');
+			assert.strictEqual(indexOf('upstream.txt'), 'remote\n');
+			git('add', 'upstream.txt');
+
+			await vscode.commands.executeCommand('indexEditor.toggleStagedBase');
+			await until('the base is HEAD', () => baseRefOf(activeDiffInput()!.original) === 'HEAD');
+			await until('the HEAD content loads', () => sideEditor('git')?.document.getText() === 'local\n');
+			assert.strictEqual(vscode.window.tabGroups.activeTabGroup.tabs.length, 1, 'the upstream diff was replaced');
+		} finally {
+			await config.update('stagedCompareBase', undefined, vscode.ConfigurationTarget.Global);
+		}
 	}],
 
 	['diffs default to side by side, even in a narrow window', async () => {
@@ -340,51 +517,95 @@ const tests: [string, (repository: Repository) => Promise<void>][] = [
 		assert.strictEqual(indexOf('kept.txt'), 'kept a\n');
 	}],
 
-	['file commands stage and unstage from SCM resource states', async repository => {
-		commitAll('scm.txt', 'a\n');
-		write('scm.txt', 'b\n');
-		await repository.refresh();
-		const state = () => repository.unstaged.resourceStates.find(s => s.resourceUri.fsPath.endsWith('scm.txt'));
-		await vscode.commands.executeCommand('indexEditor.stageFile', state());
-		assert.strictEqual(indexOf('scm.txt'), 'b\n');
-		const staged = repository.staged.resourceStates.find(s => s.resourceUri.fsPath.endsWith('scm.txt'));
-		await vscode.commands.executeCommand('indexEditor.unstageFile', staged);
-		assert.strictEqual(indexOf('scm.txt'), 'a\n');
-		assert.ok(state());
-	}],
-
-	['commit records exactly what the Index holds', async repository => {
-		commitAll('commit.txt', 'head\n');
+	['commit records exactly what the Index holds', async context => {
 		await vscode.commands.executeCommand('workbench.action.closeAllEditors');
 		git('reset', '-q');
 		git('checkout', '--', '.');
 		git('clean', '-fdq');
+		commitAll('commit.txt', 'head\n');
 		write('commit.txt', 'working tree\n');
 		await openedDiff('indexEditor.openUnstagedDiff', 'commit.txt');
 		await typeInto('workbench.action.compareEditor.focusPrimarySide', 'indexed ');
 		await sideEditor('git-index')!.document.save();
+		await vscode.commands.executeCommand('workbench.action.closeAllEditors');
+		await synced(context);
 
-		repository.sourceControl.inputBox.value = 'only the index';
-		await vscode.commands.executeCommand('indexEditor.commit', repository.sourceControl);
+		const done = await vscode.commands.executeCommand('indexEditor.commit',
+			{ message: 'only the index', amend: false, signOff: false, push: false });
+		assert.strictEqual(done, true);
 		assert.strictEqual(git('log', '-1', '--format=%s'), 'only the index\n');
 		assert.strictEqual(headOf('commit.txt'), 'indexed head\n');
 		assert.strictEqual(read('commit.txt'), 'working tree\n');
-		assert.strictEqual(repository.sourceControl.inputBox.value, '');
-		assert.strictEqual(repository.staged.resourceStates.length, 0);
+		await synced(context);
+		assert.strictEqual(context.extension.staging.entries('staged').length, 0);
+	}],
+
+	['commit refuses an empty message and an empty Index', async () => {
+		const before = git('rev-parse', 'HEAD');
+		assert.strictEqual(await vscode.commands.executeCommand('indexEditor.commit',
+			{ message: 'nothing staged', amend: false, signOff: false, push: false }), false);
+		write('commit.txt', 'staged now\n');
+		git('add', 'commit.txt');
+		assert.strictEqual(await vscode.commands.executeCommand('indexEditor.commit',
+			{ message: '   ', amend: false, signOff: false, push: false }), false);
+		assert.strictEqual(git('rev-parse', 'HEAD'), before);
+	}],
+
+	['commit with author, committer and sign-off; then amend', async () => {
+		const done = await vscode.commands.executeCommand('indexEditor.commit', {
+			message: 'with people',
+			amend: false,
+			signOff: true,
+			author: 'Ayşe Yazar <ayse@example.com>',
+			committer: 'Test <test@example.com>',
+			push: false
+		});
+		assert.strictEqual(done, true);
+		assert.strictEqual(git('log', '-1', '--format=%an|%ae|%cn|%ce'), 'Ayşe Yazar|ayse@example.com|Test|test@example.com\n');
+		assert.match(git('log', '-1', '--format=%B'), /Signed-off-by: Test <test@example.com>/);
+
+		const count = git('rev-list', '--count', 'HEAD');
+		assert.strictEqual(await vscode.commands.executeCommand('indexEditor.commit',
+			{ message: 'with people, reworded', amend: true, signOff: false, push: false }), true);
+		assert.strictEqual(git('rev-list', '--count', 'HEAD'), count);
+		assert.strictEqual(git('log', '-1', '--format=%s'), 'with people, reworded\n');
+		assert.strictEqual(git('log', '-1', '--format=%an'), 'Ayşe Yazar\n', 'amend keeps the author');
+	}],
+
+	['an invalid author stops the commit', async () => {
+		write('commit.txt', 'another\n');
+		git('add', 'commit.txt');
+		const before = git('rev-parse', 'HEAD');
+		assert.strictEqual(await vscode.commands.executeCommand('indexEditor.commit',
+			{ message: 'bad author', amend: false, signOff: false, author: 'no email here', push: false }), false);
+		assert.strictEqual(git('rev-parse', 'HEAD'), before);
+	}],
+
+	['Commit and Push pushes to the upstream; with nothing staged it only pushes', async context => {
+		const remoteMain = () => git('rev-parse', 'origin/main').trim();
+		assert.strictEqual(await vscode.commands.executeCommand('indexEditor.commit',
+			{ message: 'pushed', amend: false, signOff: false, push: true }), true);
+		await until('the remote branch moves', () => remoteMain() === git('rev-parse', 'HEAD').trim());
+
+		write('commit.txt', 'committed on the command line\n');
+		git('commit', '-q', '-am', 'cli commit');
+		await synced(context);
+		assert.strictEqual(await vscode.commands.executeCommand('indexEditor.commit',
+			{ message: '', amend: false, signOff: false, push: true }), true);
+		await until('the remote branch moves again', () => remoteMain() === git('rev-parse', 'HEAD').trim());
 	}]
 ];
 
 export async function run(): Promise<void> {
-	const extension = vscode.extensions.getExtension<{ manager: RepositoryManager }>('myilmaz.git-index-editor')!;
-	const { manager } = await extension.activate();
-	await manager.ready;
-	const repository = manager.all[0];
-	assert.ok(repository, 'the repository is found');
+	const extension = await vscode.extensions.getExtension<ExtensionApi>('myilmaz.git-index-editor')!.activate();
+	await extension.manager.ready;
+	await until('the repository is found', () => extension.manager.all.length > 0, 20000);
+	const context: Context = { extension, repository: extension.manager.all[0] };
 
 	const failures: string[] = [];
 	for (const [name, body] of tests) {
 		try {
-			await body(repository);
+			await body(context);
 			console.log(`  ok  ${name}`);
 		} catch (error) {
 			failures.push(name);

@@ -1,72 +1,28 @@
 import * as path from 'path';
 import * as vscode from 'vscode';
-import { ChangeKind, GitRepository, StatusEntry } from './git';
+import { GitRepository } from './git';
+import type { API, Repository as ApiRepository } from './typings/git';
+import { toFileUri } from './uris';
 
-const REFRESH_DELAY = 150;
-
-const CHANGE_STYLES: Record<ChangeKind, { icon: string; color: string; label: string }> = {
-	modified: { icon: 'diff-modified', color: 'gitDecoration.modifiedResourceForeground', label: 'Modified' },
-	added: { icon: 'diff-added', color: 'gitDecoration.addedResourceForeground', label: 'Added' },
-	deleted: { icon: 'diff-removed', color: 'gitDecoration.deletedResourceForeground', label: 'Deleted' },
-	typeChanged: { icon: 'diff-modified', color: 'gitDecoration.modifiedResourceForeground', label: 'Type changed' },
-	untracked: { icon: 'diff-added', color: 'gitDecoration.untrackedResourceForeground', label: 'Untracked' }
-};
-
-export function gitBinary(): string {
-	const configured = vscode.workspace.getConfiguration('git').get<string | string[] | null>('path');
-	return (Array.isArray(configured) ? configured[0] : configured) || 'git';
-}
-
+/**
+ * A repository the built-in Git extension has open. Its state (changes, HEAD, remotes) and the
+ * events that report changes come from that extension; `git` runs the commands its API lacks.
+ */
 export class Repository implements vscode.Disposable {
 	readonly rootUri: vscode.Uri;
-	readonly sourceControl: vscode.SourceControl;
-	readonly conflicts: vscode.SourceControlResourceGroup;
-	readonly unstaged: vscode.SourceControlResourceGroup;
-	readonly staged: vscode.SourceControlResourceGroup;
 
 	private readonly didChange = new vscode.EventEmitter<void>();
+	/** Fires whenever the built-in extension has re-read the repository's status. */
 	readonly onDidChange = this.didChange.event;
-
 	private readonly disposables: vscode.Disposable[] = [this.didChange];
-	private refreshTimer: NodeJS.Timeout | undefined;
-	private refreshing: Promise<void> | undefined;
-	private refreshAgain = false;
 
-	constructor(readonly git: GitRepository, private readonly log: vscode.LogOutputChannel) {
+	constructor(readonly api: ApiRepository, readonly git: GitRepository) {
 		this.rootUri = vscode.Uri.file(git.root);
+		this.disposables.push(api.state.onDidChange(() => this.didChange.fire()));
+	}
 
-		const sourceControl = vscode.scm.createSourceControl('indexEditor', 'Git Index', this.rootUri);
-		sourceControl.acceptInputCommand = { command: 'indexEditor.commit', title: 'Commit', arguments: [sourceControl] };
-		sourceControl.inputBox.placeholder = 'Message (Ctrl+Enter to commit staged changes)';
-		this.sourceControl = sourceControl;
-
-		this.conflicts = sourceControl.createResourceGroup('conflicts', 'Merge Conflicts');
-		this.conflicts.hideWhenEmpty = true;
-		this.unstaged = sourceControl.createResourceGroup('unstaged', 'Unstaged Changes');
-		this.staged = sourceControl.createResourceGroup('staged', 'Staged Changes');
-		this.disposables.push(this.conflicts, this.unstaged, this.staged, sourceControl);
-
-		const schedule = () => this.scheduleRefresh();
-		const onTreeChange = (uri: vscode.Uri) => {
-			if (!/\/\.git(\/|$)/.test(uri.path)) {
-				schedule();
-			}
-		};
-		const tree = vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(this.rootUri, '**'));
-		const meta = vscode.workspace.createFileSystemWatcher(
-			new vscode.RelativePattern(vscode.Uri.file(git.gitDir), '{index,HEAD,ORIG_HEAD,MERGE_HEAD,refs/**}')
-		);
-		this.disposables.push(
-			tree, meta,
-			tree.onDidCreate(onTreeChange), tree.onDidChange(onTreeChange), tree.onDidDelete(onTreeChange),
-			meta.onDidCreate(schedule), meta.onDidChange(schedule), meta.onDidDelete(schedule),
-			vscode.workspace.onDidSaveTextDocument(schedule),
-			vscode.window.onDidChangeWindowState(state => {
-				if (state.focused) {
-					schedule();
-				}
-			})
-		);
+	get name(): string {
+		return path.basename(this.git.root);
 	}
 
 	/** The path of a document inside this repository, or undefined if it lies outside. */
@@ -78,136 +34,120 @@ export class Repository implements vscode.Disposable {
 		return relative.split(path.sep).join('/');
 	}
 
-	scheduleRefresh(): void {
-		clearTimeout(this.refreshTimer);
-		this.refreshTimer = setTimeout(() => {
-			this.refresh().catch(error => this.log.error(error));
-		}, REFRESH_DELAY);
+	fileUri(relative: string): vscode.Uri {
+		return vscode.Uri.file(path.join(this.git.root, relative));
 	}
 
+	/** Asks the built-in extension to re-read the status now instead of waiting for its watcher. */
 	refresh(): Promise<void> {
-		if (this.refreshing) {
-			this.refreshAgain = true;
-			return this.refreshing;
-		}
-		const run = async () => {
-			do {
-				this.refreshAgain = false;
-				this.apply(await this.git.status());
-			} while (this.refreshAgain);
-		};
-		this.refreshing = run().finally(() => {
-			this.refreshing = undefined;
-		});
-		return this.refreshing;
-	}
-
-	private apply(entries: readonly StatusEntry[]): void {
-		const unstagedCommand = 'indexEditor.openUnstagedDiff';
-		const stagedCommand = 'indexEditor.openStagedDiff';
-		this.conflicts.resourceStates = entries.filter(entry => entry.conflicted)
-			.map(entry => this.conflictResource(entry));
-		this.unstaged.resourceStates = entries.filter(entry => entry.unstaged)
-			.map(entry => this.resource(entry, entry.unstaged!, unstagedCommand));
-		this.staged.resourceStates = entries.filter(entry => entry.staged)
-			.map(entry => this.resource(entry, entry.staged!, stagedCommand));
-		this.sourceControl.count = entries.length;
-		this.didChange.fire();
-	}
-
-	private fileUri(entry: StatusEntry): vscode.Uri {
-		return vscode.Uri.file(path.join(this.git.root, entry.path));
-	}
-
-	private resource(entry: StatusEntry, kind: ChangeKind, commandId: string): vscode.SourceControlResourceState {
-		const uri = this.fileUri(entry);
-		const style = CHANGE_STYLES[kind];
-		return {
-			resourceUri: uri,
-			command: entry.submodule ? undefined : { command: commandId, title: 'Open Diff', arguments: [uri] },
-			contextValue: kind,
-			decorations: {
-				iconPath: new vscode.ThemeIcon(style.icon, new vscode.ThemeColor(style.color)),
-				strikeThrough: kind === 'deleted',
-				tooltip: style.label
-			}
-		};
-	}
-
-	private conflictResource(entry: StatusEntry): vscode.SourceControlResourceState {
-		const uri = this.fileUri(entry);
-		return {
-			resourceUri: uri,
-			command: { command: 'vscode.open', title: 'Open File', arguments: [uri] },
-			decorations: {
-				iconPath: new vscode.ThemeIcon('warning', new vscode.ThemeColor('gitDecoration.conflictingResourceForeground')),
-				tooltip: 'Conflict: resolve it in the working tree, then stage the file'
-			}
-		};
+		return this.api.status();
 	}
 
 	dispose(): void {
-		clearTimeout(this.refreshTimer);
 		vscode.Disposable.from(...this.disposables).dispose();
 	}
 }
 
+/** Follows the repositories of the built-in Git extension. */
 export class RepositoryManager implements vscode.Disposable {
-	private readonly repositories = new Map<string, Repository>();
-	private readonly didChange = new vscode.EventEmitter<Repository>();
-	readonly onDidChange = this.didChange.event;
-	private readonly disposables: vscode.Disposable[] = [this.didChange];
+	private readonly repositories = new Map<ApiRepository, Promise<Repository | undefined>>();
+	private readonly opened: Repository[] = [];
 
-	/** Settles when the workspace folders have been scanned. */
+	private readonly didChange = new vscode.EventEmitter<Repository>();
+	/** A repository's status changed. */
+	readonly onDidChange = this.didChange.event;
+	private readonly didChangeRepositories = new vscode.EventEmitter<void>();
+	/** A repository was opened or closed. */
+	readonly onDidChangeRepositories = this.didChangeRepositories.event;
+	private readonly disposables: vscode.Disposable[] = [this.didChange, this.didChangeRepositories];
+
+	/** Settles when the built-in extension has finished its first scan of the workspace. */
 	readonly ready: Promise<void>;
 
-	constructor(private readonly log: vscode.LogOutputChannel) {
-		this.ready = this.scanFolders(vscode.workspace.workspaceFolders ?? []);
-		this.disposables.push(vscode.workspace.onDidChangeWorkspaceFolders(event => {
-			this.scanFolders(event.added).catch(error => this.log.error(error));
-		}));
+	constructor(private readonly gitApi: API, private readonly log: vscode.LogOutputChannel) {
+		this.disposables.push(
+			gitApi.onDidOpenRepository(repository => void this.add(repository)),
+			gitApi.onDidCloseRepository(repository => this.remove(repository))
+		);
+		this.ready = this.initialize();
+	}
+
+	private async initialize(): Promise<void> {
+		if (this.gitApi.state !== 'initialized') {
+			await new Promise<void>(resolve => {
+				const listener = this.gitApi.onDidChangeState(state => {
+					if (state === 'initialized') {
+						listener.dispose();
+						resolve();
+					}
+				});
+			});
+		}
+		await Promise.all(this.gitApi.repositories.map(repository => this.add(repository)));
 	}
 
 	get all(): Repository[] {
-		return [...this.repositories.values()];
+		return [...this.opened];
 	}
 
-	private async scanFolders(folders: readonly vscode.WorkspaceFolder[]): Promise<void> {
-		await Promise.all(folders.filter(folder => folder.uri.scheme === 'file').map(folder => this.open(folder.uri.fsPath)));
-	}
-
-	private key(root: string): string {
-		return process.platform === 'win32' ? root.toLowerCase() : root;
-	}
-
-	private async open(folder: string): Promise<Repository | undefined> {
-		const git = await GitRepository.open(gitBinary, folder, message => this.log.warn(message));
-		if (!git) {
-			return undefined;
+	private add(apiRepository: ApiRepository): Promise<Repository | undefined> {
+		let pending = this.repositories.get(apiRepository);
+		if (!pending) {
+			pending = (async () => {
+				const git = await GitRepository.open(() => this.gitApi.git.path, apiRepository.rootUri.fsPath,
+					message => this.log.warn(message));
+				if (!git || this.repositories.get(apiRepository) !== pending) {
+					return undefined;
+				}
+				const repository = new Repository(apiRepository, git);
+				repository.onDidChange(() => this.didChange.fire(repository));
+				this.opened.push(repository);
+				this.updateContext();
+				this.didChangeRepositories.fire();
+				return repository;
+			})();
+			this.repositories.set(apiRepository, pending);
 		}
-		const key = this.key(git.root);
-		let repository = this.repositories.get(key);
-		if (!repository) {
-			repository = new Repository(git, this.log);
-			this.repositories.set(key, repository);
-			const opened = repository;
-			this.disposables.push(opened, opened.onDidChange(() => this.didChange.fire(opened)));
-			vscode.commands.executeCommand('setContext', 'indexEditor.hasRepository', true);
-			await opened.refresh().catch(error => this.log.error(error));
-		}
-		return repository;
+		return pending;
 	}
 
-	/** The repository containing a document, opening it if it was not known yet. */
+	private remove(apiRepository: ApiRepository): void {
+		const index = this.opened.findIndex(repository => repository.api === apiRepository);
+		this.repositories.delete(apiRepository);
+		if (index >= 0) {
+			const [repository] = this.opened.splice(index, 1);
+			repository.dispose();
+			this.updateContext();
+			this.didChangeRepositories.fire();
+		}
+	}
+
+	private updateContext(): void {
+		void vscode.commands.executeCommand('setContext', 'indexEditor.hasRepository', this.opened.length > 0);
+		void vscode.commands.executeCommand('setContext', 'indexEditor.multipleRepositories', this.opened.length > 1);
+	}
+
+	/** The innermost open repository containing a document, of any scheme that keeps the file path. */
 	async repositoryFor(uri: vscode.Uri): Promise<Repository | undefined> {
 		await this.ready;
-		const candidates = this.all
-			.filter(repository => repository.relativePath(uri) !== undefined)
-			.sort((a, b) => b.git.root.length - a.git.root.length);
-		return candidates[0] ?? this.open(path.dirname(uri.fsPath));
+		const file = toFileUri(uri);
+		const known = this.innermost(file);
+		if (known) {
+			return known;
+		}
+		const apiRepository = this.gitApi.getRepository(file);
+		return apiRepository ? this.add(apiRepository) : undefined;
+	}
+
+	/** Like repositoryFor, among the repositories already wrapped, without waiting. */
+	innermost(uri: vscode.Uri): Repository | undefined {
+		const file = toFileUri(uri);
+		return this.opened
+			.filter(repository => repository.relativePath(file) !== undefined)
+			.sort((a, b) => b.git.root.length - a.git.root.length)[0];
 	}
 
 	dispose(): void {
-		vscode.Disposable.from(...this.disposables).dispose();
+		vscode.Disposable.from(...this.opened, ...this.disposables).dispose();
 	}
 }

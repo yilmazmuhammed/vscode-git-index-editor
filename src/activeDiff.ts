@@ -1,13 +1,18 @@
 import * as vscode from 'vscode';
 import { isInlineDiff, onDidChangeDiffMode } from './diffMode';
-import { HEAD_SCHEME, INDEX_SCHEME, isEmptyUri, toFileUri } from './uris';
+import { baseRefOf, INDEX_SCHEME, toFileUri } from './uris';
 
 export interface ActiveDiff {
+	/** `unstaged`: Working Tree ↔ Index. `staged`: base (HEAD or upstream) ↔ Index. */
 	readonly kind: 'unstaged' | 'staged';
+	/** The right side. */
 	readonly index: vscode.Uri;
-	/** The side the Index is compared with: the working tree file, or HEAD. */
+	/** The left side the Index is compared with: the working tree file, or the base at a ref. */
 	readonly other: vscode.Uri;
+	/** The file the Index side belongs to. */
 	readonly file: vscode.Uri;
+	/** For a staged diff, the ref of the base. */
+	readonly baseRef?: string;
 }
 
 /** Describes the active tab if it is one of our two diffs, shown side by side. */
@@ -17,13 +22,17 @@ export function activeDiff(): ActiveDiff | undefined {
 		return undefined;
 	}
 	const { original, modified } = input;
-	const index = [original, modified].find(uri => uri.scheme === INDEX_SCHEME);
-	if (!index) {
+	if (modified.scheme !== INDEX_SCHEME) {
 		return undefined;
 	}
-	const other = index === original ? modified : original;
-	const kind = other.scheme === HEAD_SCHEME && !isEmptyUri(other) ? 'staged' : 'unstaged';
-	return { kind, index, other, file: toFileUri(index) };
+	const baseRef = baseRefOf(original);
+	return {
+		kind: baseRef !== undefined ? 'staged' : 'unstaged',
+		index: modified,
+		other: original,
+		file: toFileUri(modified),
+		baseRef
+	};
 }
 
 /** Publishes the kind of the active diff as the `indexEditor.activeDiff` context key. */

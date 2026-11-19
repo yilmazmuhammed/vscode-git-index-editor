@@ -1,5 +1,6 @@
 import { spawn } from 'child_process';
 import { promises as fs } from 'fs';
+import * as os from 'os';
 import * as path from 'path';
 
 export class GitError extends Error {
@@ -8,75 +9,45 @@ export class GitError extends Error {
 	}
 }
 
-export type ChangeKind = 'modified' | 'added' | 'deleted' | 'typeChanged' | 'untracked';
-
-export interface StatusEntry {
-	/** Path relative to the repository root, with forward slashes. */
-	readonly path: string;
-	/** Change between HEAD and the Index, if any. */
-	readonly staged?: ChangeKind;
-	/** Change between the Index and the working tree, if any. */
-	readonly unstaged?: ChangeKind;
-	readonly conflicted: boolean;
-	readonly submodule: boolean;
-}
-
 export interface TreeEntry {
 	readonly mode: string;
 	readonly oid: string;
 }
 
+/** A git operation that is waiting for the user, read from the files Git keeps in its directory. */
+export type Operation = 'none' | 'merge' | 'rebase' | 'cherryPick' | 'revert';
+
+export interface CommitOptions {
+	readonly message: string;
+	readonly amend: boolean;
+	readonly signOff: boolean;
+	/** `Name <email>`; omitted to let Git use its configured identity. */
+	readonly author?: string;
+	readonly committer?: string;
+}
+
 interface RunOptions {
 	readonly input?: Uint8Array | string;
+	readonly env?: Readonly<Record<string, string>>;
 }
 
 const LOCK_RETRIES = 6;
 
-function changeKind(code: string): ChangeKind | undefined {
-	switch (code) {
-		case 'M': return 'modified';
-		case 'A': return 'added';
-		case 'D': return 'deleted';
-		case 'T': return 'typeChanged';
-		default: return undefined;
-	}
-}
-
-/** Parses `git status --porcelain=v2 -z --no-renames`. */
-export function parseStatus(output: string): StatusEntry[] {
-	const entries: StatusEntry[] = [];
-	for (const field of output.split('\0')) {
-		const parts = field.split(' ');
-		switch (field[0]) {
-			case '?':
-				entries.push({ path: field.slice(2), unstaged: 'untracked', conflicted: false, submodule: false });
-				break;
-			case '1':
-				entries.push({
-					path: parts.slice(8).join(' '),
-					staged: changeKind(parts[1][0]),
-					unstaged: changeKind(parts[1][1]),
-					conflicted: false,
-					submodule: parts[2][0] === 'S'
-				});
-				break;
-			case 'u':
-				entries.push({
-					path: parts.slice(10).join(' '),
-					conflicted: true,
-					submodule: parts[2][0] === 'S'
-				});
-				break;
-		}
-	}
-	return entries;
-}
+/** The submodule mode in trees and in the Index. */
+export const GITLINK_MODE = '160000';
+export const SYMLINK_MODE = '120000';
 
 function pathspecInput(paths: readonly string[]): string {
 	return paths.join('\0') + '\0';
 }
 
 const PATHSPEC_FROM_STDIN = ['--pathspec-from-file=-', '--pathspec-file-nul'];
+
+/** Splits `Name <email>` into its parts. */
+export function parseIdent(ident: string): { name: string; email: string } | undefined {
+	const match = /^\s*(.*?)\s*<([^<>]*)>\s*$/.exec(ident);
+	return match && match[1] ? { name: match[1], email: match[2] } : undefined;
+}
 
 export class GitRepository {
 	private queue: Promise<unknown> = Promise.resolve();
@@ -104,7 +75,7 @@ export class GitRepository {
 		return new Promise((resolve, reject) => {
 			const child = spawn(this.binary(), ['--literal-pathspecs', ...args], {
 				cwd: this.root,
-				env: { ...process.env, GIT_OPTIONAL_LOCKS: '0', GIT_TERMINAL_PROMPT: '0' },
+				env: { ...process.env, GIT_OPTIONAL_LOCKS: '0', GIT_TERMINAL_PROMPT: '0', ...options.env },
 				windowsHide: true
 			});
 			const stdout: Buffer[] = [];
@@ -148,11 +119,6 @@ export class GitRepository {
 		return result;
 	}
 
-	async status(): Promise<StatusEntry[]> {
-		const output = await this.run(['status', '--porcelain=v2', '-z', '--no-renames', '--untracked-files=all']);
-		return parseStatus(output.toString('utf8'));
-	}
-
 	private async indexEntries(file: string): Promise<(TreeEntry & { stage: number })[]> {
 		const output = await this.run(['ls-files', '--stage', '-z', '--', file]);
 		const entries: (TreeEntry & { stage: number })[] = [];
@@ -170,18 +136,28 @@ export class GitRepository {
 		return (await this.indexEntries(file)).find(entry => entry.stage === 0);
 	}
 
-	async headEntry(file: string): Promise<TreeEntry | undefined> {
+	/** Whether the Index holds unmerged (conflict) stages for a file. */
+	async isConflicted(file: string): Promise<boolean> {
+		return (await this.indexEntries(file)).some(entry => entry.stage !== 0);
+	}
+
+	/** The entry of a file in the tree of `ref`, or undefined if the ref or the path does not exist. */
+	async refEntry(ref: string, file: string): Promise<TreeEntry | undefined> {
 		let output: Buffer;
 		try {
-			output = await this.run(['ls-tree', '-z', 'HEAD', '--', file]);
+			output = await this.run(['ls-tree', '-z', ref, '--', file]);
 		} catch (error) {
 			if (error instanceof GitError && error.exitCode !== null) {
-				return undefined; // no commit yet
+				return undefined; // no such ref, e.g. no commit yet
 			}
 			throw error;
 		}
-		const match = /^(\d+) blob ([0-9a-f]+)\t/.exec(output.toString('utf8'));
+		const match = /^(\d+) (?:blob|commit) ([0-9a-f]+)\t/.exec(output.toString('utf8'));
 		return match ? { mode: match[1], oid: match[2] } : undefined;
+	}
+
+	headEntry(file: string): Promise<TreeEntry | undefined> {
+		return this.refEntry('HEAD', file);
 	}
 
 	readBlob(oid: string): Promise<Buffer> {
@@ -205,11 +181,25 @@ export class GitRepository {
 				throw new GitError(`${file} has unresolved merge conflicts; resolve it in the working tree and stage it.`, null);
 			}
 			const mode = entries[0]?.mode ?? (await this.headEntry(file))?.mode ?? await this.workingTreeMode(file);
+			if (mode === GITLINK_MODE) {
+				throw new GitError(`${file} is a submodule; its Index entry cannot be edited as text.`, null);
+			}
 			const filters = entries.length ? '--no-filters' : `--path=${file}`;
 			const output = await this.run(['hash-object', '-w', filters, '--stdin'], { input: content });
 			const oid = output.toString('utf8').trim();
 			await this.run(['update-index', '--add', '--cacheinfo', `${mode},${oid},${file}`]);
 			return oid;
+		});
+	}
+
+	/** Makes the Index entry of a file equal to its entry in `ref`, removing it if `ref` lacks the path. */
+	resetIndexTo(ref: string, file: string): Promise<unknown> {
+		return this.exclusive(async () => {
+			const entry = await this.refEntry(ref, file);
+			if (entry) {
+				return this.run(['update-index', '--add', '--cacheinfo', `${entry.mode},${entry.oid},${file}`]);
+			}
+			return this.run(['update-index', '--force-remove', '--', file]);
 		});
 	}
 
@@ -243,16 +233,171 @@ export class GitRepository {
 		return this.exclusive(() => this.run(['restore', ...PATHSPEC_FROM_STDIN], { input: pathspecInput(paths) }));
 	}
 
-	commit(message: string, amend: boolean): Promise<unknown> {
+	/**
+	 * Makes both the Index and the working tree match `source`. A tracked path that `source`
+	 * lacks is removed from both.
+	 */
+	restoreFromSource(source: string, paths: readonly string[]): Promise<unknown> {
+		return this.exclusive(() => this.run(
+			['restore', `--source=${source}`, '--staged', '--worktree', ...PATHSPEC_FROM_STDIN],
+			{ input: pathspecInput(paths) }
+		));
+	}
+
+	/**
+	 * Resolves conflicts by taking one side. A path that side deleted is removed and the deletion
+	 * staged; otherwise the working tree gets that side's content and the conflict stays until
+	 * the file is added to the Index.
+	 */
+	takeConflictSide(side: 'ours' | 'theirs', paths: readonly string[]): Promise<unknown> {
+		return this.exclusive(async () => {
+			for (const file of paths) {
+				try {
+					await this.run(['checkout', `--${side}`, '--', file]);
+				} catch (error) {
+					if (!(error instanceof GitError) || !/does not have (our|their) version/.test(error.message)) {
+						throw error;
+					}
+					await this.run(['rm', '-q', '--', file]);
+				}
+			}
+		});
+	}
+
+	setAssumeUnchanged(paths: readonly string[], assumeUnchanged: boolean): Promise<unknown> {
+		const flag = assumeUnchanged ? '--assume-unchanged' : '--no-assume-unchanged';
+		return this.exclusive(() => this.run(['update-index', flag, '-z', '--stdin'], { input: pathspecInput(paths) }));
+	}
+
+	/** Paths marked assume-unchanged (`git ls-files -v` reports them with a lowercase tag). */
+	async assumeUnchangedFiles(): Promise<string[]> {
+		const output = await this.run(['ls-files', '-v', '-z']);
+		return output.toString('utf8').split('\0')
+			.filter(line => /^[a-z] /.test(line))
+			.map(line => line.slice(2));
+	}
+
+	/** Removes paths from the Index but keeps them in the working tree (`git rm --cached`). */
+	untrack(paths: readonly string[]): Promise<unknown> {
+		return this.exclusive(() => this.run(['rm', '--cached', '-r', '-q', '--', ...paths]));
+	}
+
+	/** A configuration value, or undefined if it is not set. */
+	async config(key: string): Promise<string | undefined> {
+		try {
+			return (await this.run(['config', '--get', key])).toString('utf8').replace(/\r?\n$/, '');
+		} catch (error) {
+			if (error instanceof GitError && error.exitCode === 1) {
+				return undefined;
+			}
+			throw error;
+		}
+	}
+
+	/** The configured `Name <email>`, or undefined when either part is missing. */
+	async userIdent(): Promise<string | undefined> {
+		const [name, email] = await Promise.all([this.config('user.name'), this.config('user.email')]);
+		return name && email ? `${name} <${email}>` : undefined;
+	}
+
+	/** The full message of the HEAD commit, or undefined before the first commit. */
+	async headMessage(): Promise<string | undefined> {
+		try {
+			return (await this.run(['log', '-1', '--format=%B'])).toString('utf8').replace(/\s+$/, '');
+		} catch {
+			return undefined;
+		}
+	}
+
+	/** Whether some remote-tracking branch already contains HEAD, so amending would rewrite published history. */
+	async isHeadPublished(): Promise<boolean> {
+		try {
+			const output = await this.run(['for-each-ref', '--count=1', '--contains=HEAD', '--format=%(refname)', 'refs/remotes']);
+			return output.toString('utf8').trim().length > 0;
+		} catch {
+			return false;
+		}
+	}
+
+	private async exists(relative: string): Promise<boolean> {
+		try {
+			await fs.stat(path.join(this.gitDir, relative));
+			return true;
+		} catch {
+			return false;
+		}
+	}
+
+	async operation(): Promise<Operation> {
+		if (await this.exists('rebase-merge') || await this.exists('rebase-apply')) {
+			return 'rebase';
+		}
+		if (await this.exists('MERGE_HEAD')) {
+			return 'merge';
+		}
+		if (await this.exists('CHERRY_PICK_HEAD')) {
+			return 'cherryPick';
+		}
+		if (await this.exists('REVERT_HEAD')) {
+			return 'revert';
+		}
+		return 'none';
+	}
+
+	/** The message Git prepared for a merge, cherry-pick or revert commit. */
+	async preparedMessage(): Promise<string | undefined> {
+		try {
+			return await fs.readFile(path.join(this.gitDir, 'MERGE_MSG'), 'utf8');
+		} catch {
+			return undefined;
+		}
+	}
+
+	/** The content of the `commit.template` file, if one is configured and readable. */
+	async commitTemplate(): Promise<string | undefined> {
+		const configured = await this.config('commit.template');
+		if (!configured) {
+			return undefined;
+		}
+		const expanded = configured.startsWith('~') ? path.join(os.homedir(), configured.slice(1)) : configured;
+		try {
+			return await fs.readFile(path.resolve(this.root, expanded), 'utf8');
+		} catch {
+			return undefined;
+		}
+	}
+
+	commit(options: CommitOptions): Promise<unknown> {
 		const args = ['commit'];
-		if (amend) {
+		if (options.amend) {
 			args.push('--amend');
 		}
-		if (!message && amend) {
+		if (options.signOff) {
+			args.push('--signoff');
+		}
+		if (options.author) {
+			args.push(`--author=${options.author}`);
+		}
+		if (!options.message && options.amend) {
 			args.push('--no-edit');
 		} else {
 			args.push('--file=-');
 		}
-		return this.exclusive(() => this.run(args, { input: message }));
+		const committer = options.committer ? parseIdent(options.committer) : undefined;
+		const env = committer ? { GIT_COMMITTER_NAME: committer.name, GIT_COMMITTER_EMAIL: committer.email } : undefined;
+		return this.exclusive(() => this.run(args, { input: options.message, env }));
+	}
+
+	rebaseContinue(): Promise<unknown> {
+		// GIT_EDITOR=true keeps the message of the commit being replayed
+		return this.exclusive(() => this.run(['rebase', '--continue'], { env: { GIT_EDITOR: 'true' } }));
+	}
+
+	rebaseAbort(): Promise<unknown> {
+		return this.exclusive(() => this.run(['rebase', '--abort']));
+	}
+
+	mergeAbort(): Promise<unknown> {
+		return this.exclusive(() => this.run(['merge', '--abort']));
 	}
 }

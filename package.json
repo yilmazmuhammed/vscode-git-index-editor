@@ -1,8 +1,8 @@
 {
   "name": "git-index-editor",
-  "displayName": "Git Index Editor",
-  "description": "Edit the Git staging area directly: two-stage diffs (Working Tree ↔ Index, HEAD ↔ Index) whose Index side is a real, saveable editor.",
-  "version": "0.1.0",
+  "displayName": "%displayName%",
+  "description": "%description%",
+  "version": "0.2.0",
   "publisher": "myilmaz",
   "license": "MIT",
   "icon": "images/icon.png",
@@ -23,117 +23,344 @@
   ],
   "keywords": [
     "git",
-    "index",
+    "egit",
+    "eclipse",
     "staging",
+    "index",
     "stage hunk",
     "partial commit"
   ],
+  "l10n": "./l10n",
   "extensionKind": [
     "workspace"
   ],
   "capabilities": {
     "untrustedWorkspaces": {
       "supported": false,
-      "description": "Runs Git, which can execute repository hooks and configured filters."
+      "description": "%capabilities.untrusted%"
     },
     "virtualWorkspaces": false
   },
+  "extensionDependencies": [
+    "vscode.git"
+  ],
   "activationEvents": [
     "onStartupFinished",
     "onFileSystem:git-index",
-    "onFileSystem:git-head"
+    "onFileSystem:git-index-empty"
   ],
   "main": "./out/src/extension.js",
   "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "indexEditor",
+          "title": "%viewContainer.staging%",
+          "icon": "images/egit.svg"
+        }
+      ]
+    },
+    "views": {
+      "indexEditor": [
+        {
+          "id": "indexEditor.staging.unstaged",
+          "name": "%view.unstaged%",
+          "contextualTitle": "Git Staging"
+        },
+        {
+          "id": "indexEditor.staging.staged",
+          "name": "%view.staged%",
+          "contextualTitle": "Git Staging"
+        },
+        {
+          "id": "indexEditor.staging.commit",
+          "type": "webview",
+          "name": "%view.commit%",
+          "contextualTitle": "Git Staging"
+        }
+      ]
+    },
+    "viewsWelcome": [
+      {
+        "view": "indexEditor.staging.unstaged",
+        "contents": "%welcome.noRepository%",
+        "when": "!indexEditor.hasRepository"
+      }
+    ],
     "commands": [
       {
         "command": "indexEditor.openUnstagedDiff",
-        "title": "Compare Working Tree with Index",
+        "title": "%command.openUnstagedDiff%",
         "category": "Git Index",
         "icon": "$(git-compare)"
       },
       {
         "command": "indexEditor.openStagedDiff",
-        "title": "Compare HEAD with Index",
+        "title": "%command.openStagedDiff%",
         "category": "Git Index",
         "icon": "$(git-commit)"
       },
       {
         "command": "indexEditor.switchDiff",
-        "title": "Switch Between Unstaged and Staged Diff",
+        "title": "%command.switchDiff%",
         "category": "Git Index",
         "icon": "$(arrow-swap)"
       },
       {
+        "command": "indexEditor.toggleStagedBase",
+        "title": "%command.toggleStagedBase%",
+        "category": "Git Index",
+        "icon": "$(git-branch)"
+      },
+      {
         "command": "indexEditor.stageChange",
-        "title": "Stage Hunk or Selected Lines",
+        "title": "%command.stageChange%",
         "category": "Git Index",
         "icon": "$(add)"
       },
       {
         "command": "indexEditor.unstageChange",
-        "title": "Unstage Hunk or Selected Lines",
+        "title": "%command.unstageChange%",
         "category": "Git Index",
         "icon": "$(remove)"
       },
       {
         "command": "indexEditor.discardChange",
-        "title": "Discard Hunk or Selected Lines from Working Tree",
+        "title": "%command.discardChange%",
         "category": "Git Index",
         "icon": "$(discard)"
       },
       {
+        "command": "indexEditor.stageWholeFile",
+        "title": "%command.stageWholeFile%",
+        "category": "Git Index",
+        "icon": "$(check-all)"
+      },
+      {
+        "command": "indexEditor.resetIndexToBase",
+        "title": "%command.resetIndexToBase%",
+        "category": "Git Index",
+        "icon": "$(discard)"
+      },
+      {
+        "command": "indexEditor.reloadIndex",
+        "title": "%command.reloadIndex%",
+        "category": "Git Index",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "indexEditor.staging.open",
+        "title": "%command.staging.open%",
+        "category": "Git Index"
+      },
+      {
         "command": "indexEditor.stageFile",
-        "title": "Stage File",
+        "title": "%command.staging.stage%",
         "category": "Git Index",
         "icon": "$(add)"
       },
       {
         "command": "indexEditor.unstageFile",
-        "title": "Unstage File",
+        "title": "%command.staging.unstage%",
         "category": "Git Index",
         "icon": "$(remove)"
       },
       {
-        "command": "indexEditor.discardFile",
-        "title": "Discard File Changes",
+        "command": "indexEditor.stageAll",
+        "title": "%command.staging.stageAll%",
         "category": "Git Index",
-        "icon": "$(discard)"
+        "icon": "$(diff-added)"
+      },
+      {
+        "command": "indexEditor.unstageAll",
+        "title": "%command.staging.unstageAll%",
+        "category": "Git Index",
+        "icon": "$(diff-removed)"
+      },
+      {
+        "command": "indexEditor.refresh",
+        "title": "%command.staging.refresh%",
+        "category": "Git Index",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "indexEditor.staging.filter",
+        "title": "%command.staging.filter%",
+        "category": "Git Index",
+        "icon": "$(filter)"
+      },
+      {
+        "command": "indexEditor.staging.clearFilter",
+        "title": "%command.staging.clearFilter%",
+        "category": "Git Index",
+        "icon": "$(clear-all)"
+      },
+      {
+        "command": "indexEditor.staging.presentation",
+        "title": "%command.staging.presentation%",
+        "category": "Git Index",
+        "icon": "$(list-tree)"
+      },
+      {
+        "command": "indexEditor.staging.sort",
+        "title": "%command.staging.sort%",
+        "category": "Git Index"
+      },
+      {
+        "command": "indexEditor.staging.showUntracked",
+        "title": "%command.staging.showUntracked%",
+        "category": "Git Index",
+        "icon": "$(eye-closed)"
+      },
+      {
+        "command": "indexEditor.staging.hideUntracked",
+        "title": "%command.staging.hideUntracked%",
+        "category": "Git Index",
+        "icon": "$(eye)"
+      },
+      {
+        "command": "indexEditor.staging.selectRepository",
+        "title": "%command.staging.selectRepository%",
+        "category": "Git Index",
+        "icon": "$(repo)"
+      },
+      {
+        "command": "indexEditor.staging.noAssumeUnchanged",
+        "title": "%command.staging.noAssumeUnchanged%",
+        "category": "Git Index"
       },
       {
         "command": "indexEditor.openFile",
-        "title": "Open File",
+        "title": "%command.staging.openFile%",
         "category": "Git Index",
         "icon": "$(go-to-file)"
       },
       {
-        "command": "indexEditor.stageAll",
-        "title": "Stage All Changes",
-        "category": "Git Index",
-        "icon": "$(add)"
+        "command": "indexEditor.staging.compareWithHead",
+        "title": "%command.staging.compareWithHead%",
+        "category": "Git Index"
       },
       {
-        "command": "indexEditor.unstageAll",
-        "title": "Unstage All Changes",
+        "command": "indexEditor.staging.compareEachOther",
+        "title": "%command.staging.compareEachOther%",
+        "category": "Git Index"
+      },
+      {
+        "command": "indexEditor.discardFile",
+        "title": "%command.staging.replaceWithIndex%",
         "category": "Git Index",
-        "icon": "$(remove)"
+        "icon": "$(discard)"
+      },
+      {
+        "command": "indexEditor.staging.replaceWithHead",
+        "title": "%command.staging.replaceWithHead%",
+        "category": "Git Index"
+      },
+      {
+        "command": "indexEditor.staging.replaceWithOurs",
+        "title": "%command.staging.replaceWithOurs%",
+        "category": "Git Index"
+      },
+      {
+        "command": "indexEditor.staging.replaceWithTheirs",
+        "title": "%command.staging.replaceWithTheirs%",
+        "category": "Git Index"
+      },
+      {
+        "command": "indexEditor.staging.mergeTool",
+        "title": "%command.staging.mergeTool%",
+        "category": "Git Index"
+      },
+      {
+        "command": "indexEditor.staging.ignore",
+        "title": "%command.staging.ignore%",
+        "category": "Git Index"
+      },
+      {
+        "command": "indexEditor.staging.ignoreFolder",
+        "title": "%command.staging.ignoreFolder%",
+        "category": "Git Index"
+      },
+      {
+        "command": "indexEditor.staging.delete",
+        "title": "%command.staging.delete%",
+        "category": "Git Index"
+      },
+      {
+        "command": "indexEditor.staging.assumeUnchanged",
+        "title": "%command.staging.assumeUnchanged%",
+        "category": "Git Index"
+      },
+      {
+        "command": "indexEditor.staging.untrack",
+        "title": "%command.staging.untrack%",
+        "category": "Git Index"
+      },
+      {
+        "command": "indexEditor.staging.copyPath",
+        "title": "%command.staging.copyPath%",
+        "category": "Git Index"
+      },
+      {
+        "command": "indexEditor.staging.copyRelativePath",
+        "title": "%command.staging.copyRelativePath%",
+        "category": "Git Index"
+      },
+      {
+        "command": "indexEditor.staging.revealInExplorer",
+        "title": "%command.staging.revealInExplorer%",
+        "category": "Git Index"
+      },
+      {
+        "command": "indexEditor.staging.staged.compareWithHead",
+        "title": "%command.staging.compareWithHead%",
+        "category": "Git Index"
+      },
+      {
+        "command": "indexEditor.staging.staged.compareEachOther",
+        "title": "%command.staging.compareEachOther%",
+        "category": "Git Index"
+      },
+      {
+        "command": "indexEditor.staging.staged.replaceWithHead",
+        "title": "%command.staging.replaceWithHead%",
+        "category": "Git Index"
+      },
+      {
+        "command": "indexEditor.staging.staged.untrack",
+        "title": "%command.staging.untrack%",
+        "category": "Git Index"
+      },
+      {
+        "command": "indexEditor.staging.staged.copyPath",
+        "title": "%command.staging.copyPath%",
+        "category": "Git Index"
+      },
+      {
+        "command": "indexEditor.staging.staged.copyRelativePath",
+        "title": "%command.staging.copyRelativePath%",
+        "category": "Git Index"
+      },
+      {
+        "command": "indexEditor.staging.staged.revealInExplorer",
+        "title": "%command.staging.revealInExplorer%",
+        "category": "Git Index"
       },
       {
         "command": "indexEditor.commit",
-        "title": "Commit",
+        "title": "%command.commit%",
         "category": "Git Index",
         "icon": "$(check)"
       },
       {
         "command": "indexEditor.commitAmend",
-        "title": "Commit (Amend)",
+        "title": "%command.commitAmend%",
         "category": "Git Index"
       },
       {
-        "command": "indexEditor.refresh",
-        "title": "Refresh",
-        "category": "Git Index",
-        "icon": "$(refresh)"
+        "command": "indexEditor.focusCommit",
+        "title": "%command.focusCommit%",
+        "category": "Git Index"
       }
     ],
     "menus": {
@@ -155,6 +382,58 @@
           "when": "indexEditor.activeDiff && !diffEditorInlineMode"
         },
         {
+          "command": "indexEditor.toggleStagedBase",
+          "when": "indexEditor.activeDiff == staged"
+        },
+        {
+          "command": "indexEditor.stageWholeFile",
+          "when": "indexEditor.activeDiff == unstaged"
+        },
+        {
+          "command": "indexEditor.resetIndexToBase",
+          "when": "indexEditor.activeDiff == staged"
+        },
+        {
+          "command": "indexEditor.reloadIndex",
+          "when": "indexEditor.activeDiff"
+        },
+        {
+          "command": "indexEditor.stageAll",
+          "when": "indexEditor.hasRepository"
+        },
+        {
+          "command": "indexEditor.unstageAll",
+          "when": "indexEditor.hasRepository"
+        },
+        {
+          "command": "indexEditor.refresh",
+          "when": "indexEditor.hasRepository"
+        },
+        {
+          "command": "indexEditor.staging.filter",
+          "when": "indexEditor.hasRepository"
+        },
+        {
+          "command": "indexEditor.staging.clearFilter",
+          "when": "indexEditor.staging.filtered"
+        },
+        {
+          "command": "indexEditor.staging.selectRepository",
+          "when": "indexEditor.multipleRepositories"
+        },
+        {
+          "command": "indexEditor.staging.noAssumeUnchanged",
+          "when": "indexEditor.hasRepository"
+        },
+        {
+          "command": "indexEditor.focusCommit",
+          "when": "indexEditor.hasRepository"
+        },
+        {
+          "command": "indexEditor.staging.open",
+          "when": "false"
+        },
+        {
           "command": "indexEditor.stageFile",
           "when": "false"
         },
@@ -163,12 +442,313 @@
           "when": "false"
         },
         {
+          "command": "indexEditor.openFile",
+          "when": "false"
+        },
+        {
+          "command": "indexEditor.staging.compareWithHead",
+          "when": "false"
+        },
+        {
+          "command": "indexEditor.staging.compareEachOther",
+          "when": "false"
+        },
+        {
           "command": "indexEditor.discardFile",
           "when": "false"
         },
         {
-          "command": "indexEditor.openFile",
+          "command": "indexEditor.staging.replaceWithHead",
           "when": "false"
+        },
+        {
+          "command": "indexEditor.staging.replaceWithOurs",
+          "when": "false"
+        },
+        {
+          "command": "indexEditor.staging.replaceWithTheirs",
+          "when": "false"
+        },
+        {
+          "command": "indexEditor.staging.mergeTool",
+          "when": "false"
+        },
+        {
+          "command": "indexEditor.staging.ignore",
+          "when": "false"
+        },
+        {
+          "command": "indexEditor.staging.ignoreFolder",
+          "when": "false"
+        },
+        {
+          "command": "indexEditor.staging.delete",
+          "when": "false"
+        },
+        {
+          "command": "indexEditor.staging.assumeUnchanged",
+          "when": "false"
+        },
+        {
+          "command": "indexEditor.staging.untrack",
+          "when": "false"
+        },
+        {
+          "command": "indexEditor.staging.copyPath",
+          "when": "false"
+        },
+        {
+          "command": "indexEditor.staging.copyRelativePath",
+          "when": "false"
+        },
+        {
+          "command": "indexEditor.staging.revealInExplorer",
+          "when": "false"
+        },
+        {
+          "command": "indexEditor.staging.staged.compareWithHead",
+          "when": "false"
+        },
+        {
+          "command": "indexEditor.staging.staged.compareEachOther",
+          "when": "false"
+        },
+        {
+          "command": "indexEditor.staging.staged.replaceWithHead",
+          "when": "false"
+        },
+        {
+          "command": "indexEditor.staging.staged.untrack",
+          "when": "false"
+        },
+        {
+          "command": "indexEditor.staging.staged.copyPath",
+          "when": "false"
+        },
+        {
+          "command": "indexEditor.staging.staged.copyRelativePath",
+          "when": "false"
+        },
+        {
+          "command": "indexEditor.staging.staged.revealInExplorer",
+          "when": "false"
+        },
+        {
+          "command": "indexEditor.commit",
+          "when": "indexEditor.hasRepository"
+        },
+        {
+          "command": "indexEditor.commitAmend",
+          "when": "indexEditor.hasRepository"
+        }
+      ],
+      "view/title": [
+        {
+          "command": "indexEditor.stageAll",
+          "when": "view == indexEditor.staging.unstaged",
+          "group": "navigation@1"
+        },
+        {
+          "command": "indexEditor.staging.hideUntracked",
+          "when": "view == indexEditor.staging.unstaged && config.indexEditor.staging.showUntracked",
+          "group": "navigation@2"
+        },
+        {
+          "command": "indexEditor.staging.showUntracked",
+          "when": "view == indexEditor.staging.unstaged && !config.indexEditor.staging.showUntracked",
+          "group": "navigation@2"
+        },
+        {
+          "command": "indexEditor.staging.filter",
+          "when": "view =~ /^indexEditor\\.staging\\.(unstaged|staged)$/",
+          "group": "navigation@3"
+        },
+        {
+          "command": "indexEditor.staging.clearFilter",
+          "when": "view =~ /^indexEditor\\.staging\\.(unstaged|staged)$/ && indexEditor.staging.filtered",
+          "group": "navigation@4"
+        },
+        {
+          "command": "indexEditor.refresh",
+          "when": "view =~ /^indexEditor\\.staging\\.(unstaged|staged)$/",
+          "group": "navigation@9"
+        },
+        {
+          "command": "indexEditor.unstageAll",
+          "when": "view == indexEditor.staging.staged",
+          "group": "navigation@1"
+        },
+        {
+          "command": "indexEditor.staging.selectRepository",
+          "when": "view =~ /^indexEditor\\.staging\\./ && indexEditor.multipleRepositories",
+          "group": "navigation@8"
+        },
+        {
+          "command": "indexEditor.staging.presentation",
+          "when": "view =~ /^indexEditor\\.staging\\.(unstaged|staged)$/",
+          "group": "1_view@1"
+        },
+        {
+          "command": "indexEditor.staging.sort",
+          "when": "view =~ /^indexEditor\\.staging\\.(unstaged|staged)$/",
+          "group": "1_view@2"
+        },
+        {
+          "command": "indexEditor.staging.noAssumeUnchanged",
+          "when": "view == indexEditor.staging.unstaged",
+          "group": "2_index@1"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "indexEditor.openFile",
+          "when": "view == indexEditor.staging.unstaged && viewItem =~ /^unstaged\\.file\\.(?!deleted)/",
+          "group": "inline@1"
+        },
+        {
+          "command": "indexEditor.stageFile",
+          "when": "view == indexEditor.staging.unstaged && viewItem =~ /^unstaged\\./",
+          "group": "inline@2"
+        },
+        {
+          "command": "indexEditor.stageFile",
+          "when": "view == indexEditor.staging.unstaged && viewItem =~ /^unstaged\\./",
+          "group": "1_index@1"
+        },
+        {
+          "command": "indexEditor.openFile",
+          "when": "view == indexEditor.staging.unstaged && viewItem =~ /^unstaged\\.file\\.(?!deleted)/",
+          "group": "2_open@1"
+        },
+        {
+          "command": "indexEditor.staging.compareWithHead",
+          "when": "view == indexEditor.staging.unstaged && viewItem =~ /^unstaged\\.file\\.(modified|typeChanged|renamed)$/",
+          "group": "2_open@2"
+        },
+        {
+          "command": "indexEditor.staging.compareEachOther",
+          "when": "view == indexEditor.staging.unstaged && viewItem =~ /^unstaged\\.file\\./ && listMultiSelection",
+          "group": "2_open@3"
+        },
+        {
+          "command": "indexEditor.discardFile",
+          "when": "view == indexEditor.staging.unstaged && viewItem =~ /^unstaged\\.file\\.(?!conflict)/",
+          "group": "3_replace@1"
+        },
+        {
+          "command": "indexEditor.staging.replaceWithHead",
+          "when": "view == indexEditor.staging.unstaged && viewItem =~ /^unstaged\\.file\\.(modified|deleted|typeChanged|renamed)$/",
+          "group": "3_replace@2"
+        },
+        {
+          "command": "indexEditor.staging.mergeTool",
+          "when": "view == indexEditor.staging.unstaged && viewItem == unstaged.file.conflict",
+          "group": "4_conflict@1"
+        },
+        {
+          "command": "indexEditor.staging.replaceWithOurs",
+          "when": "view == indexEditor.staging.unstaged && viewItem == unstaged.file.conflict",
+          "group": "4_conflict@2"
+        },
+        {
+          "command": "indexEditor.staging.replaceWithTheirs",
+          "when": "view == indexEditor.staging.unstaged && viewItem == unstaged.file.conflict",
+          "group": "4_conflict@3"
+        },
+        {
+          "command": "indexEditor.staging.ignore",
+          "when": "view == indexEditor.staging.unstaged && viewItem == unstaged.file.untracked",
+          "group": "5_ignore@1"
+        },
+        {
+          "command": "indexEditor.staging.ignoreFolder",
+          "when": "view == indexEditor.staging.unstaged && viewItem =~ /^unstaged\\.file\\./",
+          "group": "5_ignore@2"
+        },
+        {
+          "command": "indexEditor.staging.assumeUnchanged",
+          "when": "view == indexEditor.staging.unstaged && viewItem =~ /^unstaged\\.file\\.(modified|typeChanged)$/",
+          "group": "5_ignore@3"
+        },
+        {
+          "command": "indexEditor.staging.untrack",
+          "when": "view == indexEditor.staging.unstaged && viewItem =~ /^unstaged\\.file\\.(modified|typeChanged)$/",
+          "group": "5_ignore@4"
+        },
+        {
+          "command": "indexEditor.staging.delete",
+          "when": "view == indexEditor.staging.unstaged && viewItem =~ /^unstaged\\.file\\.(?!deleted)/",
+          "group": "5_ignore@5"
+        },
+        {
+          "command": "indexEditor.staging.copyPath",
+          "when": "view == indexEditor.staging.unstaged && viewItem =~ /^unstaged\\.file\\./",
+          "group": "9_copy@1"
+        },
+        {
+          "command": "indexEditor.staging.copyRelativePath",
+          "when": "view == indexEditor.staging.unstaged && viewItem =~ /^unstaged\\.file\\./",
+          "group": "9_copy@2"
+        },
+        {
+          "command": "indexEditor.staging.revealInExplorer",
+          "when": "view == indexEditor.staging.unstaged && viewItem =~ /^unstaged\\.file\\.(?!deleted)/",
+          "group": "9_copy@3"
+        },
+        {
+          "command": "indexEditor.openFile",
+          "when": "view == indexEditor.staging.staged && viewItem =~ /^staged\\.file\\.(?!deleted)/",
+          "group": "inline@1"
+        },
+        {
+          "command": "indexEditor.unstageFile",
+          "when": "view == indexEditor.staging.staged && viewItem =~ /^staged\\./",
+          "group": "inline@2"
+        },
+        {
+          "command": "indexEditor.unstageFile",
+          "when": "view == indexEditor.staging.staged && viewItem =~ /^staged\\./",
+          "group": "1_index@1"
+        },
+        {
+          "command": "indexEditor.openFile",
+          "when": "view == indexEditor.staging.staged && viewItem =~ /^staged\\.file\\.(?!deleted)/",
+          "group": "2_open@1"
+        },
+        {
+          "command": "indexEditor.staging.staged.compareWithHead",
+          "when": "view == indexEditor.staging.staged && viewItem =~ /^staged\\.file\\.(modified|typeChanged|renamed)$/",
+          "group": "2_open@2"
+        },
+        {
+          "command": "indexEditor.staging.staged.compareEachOther",
+          "when": "view == indexEditor.staging.staged && viewItem =~ /^staged\\.file\\./ && listMultiSelection",
+          "group": "2_open@3"
+        },
+        {
+          "command": "indexEditor.staging.staged.replaceWithHead",
+          "when": "view == indexEditor.staging.staged && viewItem =~ /^staged\\.file\\.(modified|deleted|typeChanged|renamed|added)$/",
+          "group": "3_replace@1"
+        },
+        {
+          "command": "indexEditor.staging.staged.untrack",
+          "when": "view == indexEditor.staging.staged && viewItem =~ /^staged\\.file\\.(modified|typeChanged|renamed)$/",
+          "group": "5_ignore@1"
+        },
+        {
+          "command": "indexEditor.staging.staged.copyPath",
+          "when": "view == indexEditor.staging.staged && viewItem =~ /^staged\\.file\\./",
+          "group": "9_copy@1"
+        },
+        {
+          "command": "indexEditor.staging.staged.copyRelativePath",
+          "when": "view == indexEditor.staging.staged && viewItem =~ /^staged\\.file\\./",
+          "group": "9_copy@2"
+        },
+        {
+          "command": "indexEditor.staging.staged.revealInExplorer",
+          "when": "view == indexEditor.staging.staged && viewItem =~ /^staged\\.file\\.(?!deleted)/",
+          "group": "9_copy@3"
         }
       ],
       "editor/title": [
@@ -183,9 +763,29 @@
           "group": "navigation@1"
         },
         {
+          "command": "indexEditor.toggleStagedBase",
+          "when": "indexEditor.activeDiff == staged && !diffEditorInlineMode",
+          "group": "navigation@2"
+        },
+        {
           "command": "indexEditor.switchDiff",
           "when": "indexEditor.activeDiff && !diffEditorInlineMode",
-          "group": "navigation@2"
+          "group": "navigation@3"
+        },
+        {
+          "command": "indexEditor.stageWholeFile",
+          "when": "indexEditor.activeDiff == unstaged",
+          "group": "1_indexEditor@1"
+        },
+        {
+          "command": "indexEditor.resetIndexToBase",
+          "when": "indexEditor.activeDiff == staged",
+          "group": "1_indexEditor@2"
+        },
+        {
+          "command": "indexEditor.reloadIndex",
+          "when": "indexEditor.activeDiff",
+          "group": "1_indexEditor@3"
         },
         {
           "command": "indexEditor.openUnstagedDiff",
@@ -227,69 +827,15 @@
           "group": "3_compare@11"
         }
       ],
-      "scm/title": [
-        {
-          "command": "indexEditor.commit",
-          "when": "scmProvider == indexEditor",
-          "group": "navigation@1"
-        },
-        {
-          "command": "indexEditor.refresh",
-          "when": "scmProvider == indexEditor",
-          "group": "navigation@2"
-        },
-        {
-          "command": "indexEditor.commitAmend",
-          "when": "scmProvider == indexEditor",
-          "group": "1_commit@1"
-        }
-      ],
-      "scm/resourceGroup/context": [
-        {
-          "command": "indexEditor.stageAll",
-          "when": "scmProvider == indexEditor && scmResourceGroup == unstaged",
-          "group": "inline"
-        },
-        {
-          "command": "indexEditor.unstageAll",
-          "when": "scmProvider == indexEditor && scmResourceGroup == staged",
-          "group": "inline"
-        }
-      ],
       "scm/resourceState/context": [
         {
-          "command": "indexEditor.openFile",
-          "when": "scmProvider == indexEditor",
-          "group": "inline@1"
-        },
-        {
-          "command": "indexEditor.discardFile",
-          "when": "scmProvider == indexEditor && scmResourceGroup == unstaged",
-          "group": "inline@2"
-        },
-        {
-          "command": "indexEditor.stageFile",
-          "when": "scmProvider == indexEditor && scmResourceGroup == unstaged",
-          "group": "inline@3"
-        },
-        {
-          "command": "indexEditor.stageFile",
-          "when": "scmProvider == indexEditor && scmResourceGroup == conflicts",
-          "group": "inline@3"
-        },
-        {
-          "command": "indexEditor.unstageFile",
-          "when": "scmProvider == indexEditor && scmResourceGroup == staged",
-          "group": "inline@3"
-        },
-        {
           "command": "indexEditor.openUnstagedDiff",
-          "when": "scmProvider == git",
+          "when": "scmProvider == git && scmResourceGroup =~ /^(workingTree|untracked)$/",
           "group": "navigation@90"
         },
         {
           "command": "indexEditor.openStagedDiff",
-          "when": "scmProvider == git",
+          "when": "scmProvider == git && scmResourceGroup == index",
           "group": "navigation@91"
         }
       ]
@@ -321,18 +867,100 @@
     "configuration": {
       "title": "Git Index Editor",
       "properties": {
-        "indexEditor.unstagedDiffLayout": {
+        "indexEditor.staging.stagedCompareBase": {
           "type": "string",
           "enum": [
-            "indexRight",
-            "indexLeft"
+            "HEAD",
+            "upstream"
           ],
           "enumDescriptions": [
-            "Working tree on the left, Index on the right. The diff gutter's arrow copies a block into the Index, so it stages. Your new lines appear on the red side.",
-            "Index on the left, working tree on the right. New lines appear green as usual, but the gutter arrow changes the working tree instead of the Index."
+            "%config.stagedCompareBase.head%",
+            "%config.stagedCompareBase.upstream%"
           ],
-          "default": "indexRight",
-          "description": "Side of the Working Tree ↔ Index diff that shows the Index."
+          "default": "HEAD",
+          "description": "%config.stagedCompareBase%"
+        },
+        "indexEditor.staging.presentation": {
+          "type": "string",
+          "enum": [
+            "list",
+            "tree",
+            "compactTree"
+          ],
+          "enumDescriptions": [
+            "%config.presentation.list%",
+            "%config.presentation.tree%",
+            "%config.presentation.compactTree%"
+          ],
+          "default": "list",
+          "description": "%config.presentation%"
+        },
+        "indexEditor.staging.sortBy": {
+          "type": "string",
+          "enum": [
+            "name",
+            "status"
+          ],
+          "enumDescriptions": [
+            "%config.sortBy.name%",
+            "%config.sortBy.status%"
+          ],
+          "default": "name",
+          "description": "%config.sortBy%"
+        },
+        "indexEditor.staging.showUntracked": {
+          "type": "boolean",
+          "default": true,
+          "description": "%config.showUntracked%"
+        },
+        "indexEditor.staging.followActiveEditor": {
+          "type": "boolean",
+          "default": true,
+          "description": "%config.followActiveEditor%"
+        },
+        "indexEditor.commit.signOffByDefault": {
+          "type": "boolean",
+          "default": false,
+          "description": "%config.signOffByDefault%"
+        },
+        "indexEditor.commit.problemCheck": {
+          "type": "string",
+          "enum": [
+            "off",
+            "warn",
+            "block"
+          ],
+          "enumDescriptions": [
+            "%config.problemCheck.off%",
+            "%config.problemCheck.warn%",
+            "%config.problemCheck.block%"
+          ],
+          "default": "off",
+          "description": "%config.problemCheck%"
+        },
+        "indexEditor.commit.problemSeverity": {
+          "type": "string",
+          "enum": [
+            "error",
+            "warning"
+          ],
+          "enumDescriptions": [
+            "%config.problemSeverity.error%",
+            "%config.problemSeverity.warning%"
+          ],
+          "default": "error",
+          "description": "%config.problemSeverity%"
+        },
+        "indexEditor.commit.messageHistorySize": {
+          "type": "number",
+          "default": 20,
+          "minimum": 0,
+          "description": "%config.messageHistorySize%"
+        },
+        "indexEditor.decorations.assumeUnchanged": {
+          "type": "boolean",
+          "default": true,
+          "description": "%config.assumeUnchanged%"
         }
       }
     },
@@ -346,9 +974,9 @@
         }
       },
       {
-        "scheme": "git-head",
+        "scheme": "git-index-empty",
         "formatting": {
-          "label": "${path} (HEAD)",
+          "label": "${path}",
           "separator": "/",
           "stripPathStartingSeparator": true
         }
@@ -368,7 +996,7 @@
     "@types/node": "^20.14.0",
     "@types/vscode": "~1.100.0",
     "@vscode/test-electron": "^2.5.2",
-    "@vscode/vsce": "^3.3.2",
+    "@vscode/vsce": "^4.1.1",
     "typescript": "^5.8.3"
   }
 }
