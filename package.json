@@ -2,7 +2,7 @@
   "name": "git-index-editor",
   "displayName": "%displayName%",
   "description": "%description%",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "publisher": "myilmaz",
   "license": "MIT",
   "icon": "images/icon.png",
@@ -63,6 +63,11 @@
     "views": {
       "indexEditor": [
         {
+          "id": "indexEditor.repositories",
+          "name": "%view.repositories%",
+          "contextualTitle": "Git Staging"
+        },
+        {
           "id": "indexEditor.staging.unstaged",
           "name": "%view.unstaged%",
           "contextualTitle": "Git Staging"
@@ -83,6 +88,11 @@
     "viewsWelcome": [
       {
         "view": "indexEditor.staging.unstaged",
+        "contents": "%welcome.noRepository%",
+        "when": "!indexEditor.hasRepository"
+      },
+      {
+        "view": "indexEditor.repositories",
         "contents": "%welcome.noRepository%",
         "when": "!indexEditor.hasRepository"
       }
@@ -217,6 +227,11 @@
         "title": "%command.staging.hideUntracked%",
         "category": "Git Index",
         "icon": "$(eye)"
+      },
+      {
+        "command": "indexEditor.staging.showInStaging",
+        "title": "%command.staging.showInStaging%",
+        "category": "Git Index"
       },
       {
         "command": "indexEditor.staging.selectRepository",
@@ -361,6 +376,158 @@
         "command": "indexEditor.focusCommit",
         "title": "%command.focusCommit%",
         "category": "Git Index"
+      },
+      {
+        "command": "indexEditor.repositories.refresh",
+        "title": "%command.repositories.refresh%",
+        "category": "Git Index",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "indexEditor.repositories.showFlat",
+        "title": "%command.repositories.showFlat%",
+        "category": "Git Index",
+        "icon": "$(list-flat)"
+      },
+      {
+        "command": "indexEditor.repositories.showHierarchical",
+        "title": "%command.repositories.showHierarchical%",
+        "category": "Git Index",
+        "icon": "$(list-tree)"
+      },
+      {
+        "command": "indexEditor.repositories.showLatestCommit",
+        "title": "%command.repositories.showLatestCommit%",
+        "category": "Git Index"
+      },
+      {
+        "command": "indexEditor.repositories.hideLatestCommit",
+        "title": "%command.repositories.hideLatestCommit%",
+        "category": "Git Index"
+      },
+      {
+        "command": "indexEditor.repositories.linkWithEditor",
+        "title": "%command.repositories.linkWithEditor%",
+        "category": "Git Index"
+      },
+      {
+        "command": "indexEditor.repositories.unlinkWithEditor",
+        "title": "%command.repositories.unlinkWithEditor%",
+        "category": "Git Index"
+      },
+      {
+        "command": "indexEditor.repositories.showInStaging",
+        "title": "%command.repositories.showInStaging%",
+        "category": "Git Index",
+        "icon": "$(git-commit)"
+      },
+      {
+        "command": "indexEditor.repositories.copyPath",
+        "title": "%command.repositories.copyPath%",
+        "category": "Git Index"
+      },
+      {
+        "command": "indexEditor.repositories.checkout",
+        "title": "%command.repositories.checkout%",
+        "category": "Git Index",
+        "icon": "$(check)"
+      },
+      {
+        "command": "indexEditor.repositories.createBranch",
+        "title": "%command.repositories.createBranch%",
+        "category": "Git Index",
+        "icon": "$(add)"
+      },
+      {
+        "command": "indexEditor.repositories.renameBranch",
+        "title": "%command.repositories.renameBranch%",
+        "category": "Git Index"
+      },
+      {
+        "command": "indexEditor.repositories.deleteBranch",
+        "title": "%command.repositories.deleteBranch%",
+        "category": "Git Index",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "indexEditor.repositories.configureBranch",
+        "title": "%command.repositories.configureBranch%",
+        "category": "Git Index",
+        "icon": "$(settings-gear)"
+      },
+      {
+        "command": "indexEditor.repositories.switchTo",
+        "title": "%command.repositories.switchTo%",
+        "category": "Git Index",
+        "icon": "$(arrow-swap)"
+      },
+      {
+        "command": "indexEditor.repositories.fetch",
+        "title": "%command.repositories.fetch%",
+        "category": "Git Index",
+        "icon": "$(cloud-download)"
+      },
+      {
+        "command": "indexEditor.repositories.fetchFrom",
+        "title": "%command.repositories.fetchFrom%",
+        "category": "Git Index"
+      },
+      {
+        "command": "indexEditor.repositories.pull",
+        "title": "%command.repositories.pull%",
+        "category": "Git Index",
+        "icon": "$(repo-pull)"
+      },
+      {
+        "command": "indexEditor.repositories.pullWith",
+        "title": "%command.repositories.pullWith%",
+        "category": "Git Index"
+      },
+      {
+        "command": "indexEditor.repositories.pushUpstream",
+        "title": "%command.repositories.pushUpstream%",
+        "category": "Git Index",
+        "icon": "$(repo-push)"
+      },
+      {
+        "command": "indexEditor.repositories.pushBranch",
+        "title": "%command.repositories.pushBranch%",
+        "category": "Git Index",
+        "icon": "$(cloud-upload)"
+      },
+      {
+        "command": "indexEditor.repositories.push",
+        "title": "%command.repositories.push%",
+        "category": "Git Index"
+      },
+      {
+        "command": "indexEditor.repositories.deleteRemoteBranch",
+        "title": "%command.repositories.deleteRemoteBranch%",
+        "category": "Git Index",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "indexEditor.repositories.createRemote",
+        "title": "%command.repositories.createRemote%",
+        "category": "Git Index",
+        "icon": "$(add)"
+      },
+      {
+        "command": "indexEditor.repositories.configureRemote",
+        "title": "%command.repositories.configureRemote%",
+        "category": "Git Index",
+        "icon": "$(settings-gear)"
+      },
+      {
+        "command": "indexEditor.repositories.renameRemote",
+        "title": "%command.repositories.renameRemote%",
+        "category": "Git Index"
+      },
+      {
+        "command": "indexEditor.repositories.deleteRemote",
+        "title": "%command.repositories.deleteRemote%",
+        "category": "Git Index",
+        "icon": "$(trash)"
       }
     ],
     "menus": {
@@ -416,6 +583,10 @@
         {
           "command": "indexEditor.staging.clearFilter",
           "when": "indexEditor.staging.filtered"
+        },
+        {
+          "command": "indexEditor.staging.showInStaging",
+          "when": "indexEditor.hasRepository"
         },
         {
           "command": "indexEditor.staging.selectRepository",
@@ -540,6 +711,114 @@
         {
           "command": "indexEditor.commitAmend",
           "when": "indexEditor.hasRepository"
+        },
+        {
+          "command": "indexEditor.repositories.refresh",
+          "when": "indexEditor.hasRepository"
+        },
+        {
+          "command": "indexEditor.repositories.showFlat",
+          "when": "false"
+        },
+        {
+          "command": "indexEditor.repositories.showHierarchical",
+          "when": "false"
+        },
+        {
+          "command": "indexEditor.repositories.showLatestCommit",
+          "when": "false"
+        },
+        {
+          "command": "indexEditor.repositories.hideLatestCommit",
+          "when": "false"
+        },
+        {
+          "command": "indexEditor.repositories.linkWithEditor",
+          "when": "false"
+        },
+        {
+          "command": "indexEditor.repositories.unlinkWithEditor",
+          "when": "false"
+        },
+        {
+          "command": "indexEditor.repositories.showInStaging",
+          "when": "false"
+        },
+        {
+          "command": "indexEditor.repositories.copyPath",
+          "when": "false"
+        },
+        {
+          "command": "indexEditor.repositories.checkout",
+          "when": "false"
+        },
+        {
+          "command": "indexEditor.repositories.createBranch",
+          "when": "indexEditor.hasRepository"
+        },
+        {
+          "command": "indexEditor.repositories.renameBranch",
+          "when": "false"
+        },
+        {
+          "command": "indexEditor.repositories.deleteBranch",
+          "when": "false"
+        },
+        {
+          "command": "indexEditor.repositories.configureBranch",
+          "when": "indexEditor.hasRepository"
+        },
+        {
+          "command": "indexEditor.repositories.switchTo",
+          "when": "indexEditor.hasRepository"
+        },
+        {
+          "command": "indexEditor.repositories.fetch",
+          "when": "indexEditor.hasRepository"
+        },
+        {
+          "command": "indexEditor.repositories.fetchFrom",
+          "when": "indexEditor.hasRepository"
+        },
+        {
+          "command": "indexEditor.repositories.pull",
+          "when": "indexEditor.hasRepository"
+        },
+        {
+          "command": "indexEditor.repositories.pullWith",
+          "when": "indexEditor.hasRepository"
+        },
+        {
+          "command": "indexEditor.repositories.pushUpstream",
+          "when": "indexEditor.hasRepository"
+        },
+        {
+          "command": "indexEditor.repositories.pushBranch",
+          "when": "indexEditor.hasRepository"
+        },
+        {
+          "command": "indexEditor.repositories.push",
+          "when": "indexEditor.hasRepository"
+        },
+        {
+          "command": "indexEditor.repositories.deleteRemoteBranch",
+          "when": "false"
+        },
+        {
+          "command": "indexEditor.repositories.createRemote",
+          "when": "indexEditor.hasRepository"
+        },
+        {
+          "command": "indexEditor.repositories.configureRemote",
+          "when": "false"
+        },
+        {
+          "command": "indexEditor.repositories.renameRemote",
+          "when": "false"
+        },
+        {
+          "command": "indexEditor.repositories.deleteRemote",
+          "when": "false"
         }
       ],
       "view/title": [
@@ -597,6 +876,41 @@
           "command": "indexEditor.staging.noAssumeUnchanged",
           "when": "view == indexEditor.staging.unstaged",
           "group": "2_index@1"
+        },
+        {
+          "command": "indexEditor.repositories.showFlat",
+          "when": "view == indexEditor.repositories && config.indexEditor.repositories.hierarchicalBranches",
+          "group": "navigation@1"
+        },
+        {
+          "command": "indexEditor.repositories.showHierarchical",
+          "when": "view == indexEditor.repositories && !config.indexEditor.repositories.hierarchicalBranches",
+          "group": "navigation@1"
+        },
+        {
+          "command": "indexEditor.repositories.refresh",
+          "when": "view == indexEditor.repositories",
+          "group": "navigation@9"
+        },
+        {
+          "command": "indexEditor.repositories.showLatestCommit",
+          "when": "view == indexEditor.repositories && !config.indexEditor.repositories.showLatestCommit",
+          "group": "1_view@1"
+        },
+        {
+          "command": "indexEditor.repositories.hideLatestCommit",
+          "when": "view == indexEditor.repositories && config.indexEditor.repositories.showLatestCommit",
+          "group": "1_view@1"
+        },
+        {
+          "command": "indexEditor.repositories.linkWithEditor",
+          "when": "view == indexEditor.repositories && !config.indexEditor.repositories.linkWithEditor",
+          "group": "1_view@2"
+        },
+        {
+          "command": "indexEditor.repositories.unlinkWithEditor",
+          "when": "view == indexEditor.repositories && config.indexEditor.repositories.linkWithEditor",
+          "group": "1_view@2"
         }
       ],
       "view/item/context": [
@@ -749,6 +1063,231 @@
           "command": "indexEditor.staging.staged.revealInExplorer",
           "when": "view == indexEditor.staging.staged && viewItem =~ /^staged\\.file\\.(?!deleted)/",
           "group": "9_copy@3"
+        },
+        {
+          "command": "indexEditor.repositories.fetch",
+          "when": "view == indexEditor.repositories && viewItem == repository",
+          "group": "inline@1"
+        },
+        {
+          "command": "indexEditor.repositories.pull",
+          "when": "view == indexEditor.repositories && viewItem == repository",
+          "group": "inline@2"
+        },
+        {
+          "command": "indexEditor.repositories.pushUpstream",
+          "when": "view == indexEditor.repositories && viewItem == repository",
+          "group": "inline@3"
+        },
+        {
+          "command": "indexEditor.repositories.showInStaging",
+          "when": "view == indexEditor.repositories && viewItem == repository",
+          "group": "1_staging@1"
+        },
+        {
+          "command": "indexEditor.repositories.fetch",
+          "when": "view == indexEditor.repositories && viewItem == repository",
+          "group": "2_sync@1"
+        },
+        {
+          "command": "indexEditor.repositories.fetchFrom",
+          "when": "view == indexEditor.repositories && viewItem == repository",
+          "group": "2_sync@2"
+        },
+        {
+          "command": "indexEditor.repositories.pull",
+          "when": "view == indexEditor.repositories && viewItem == repository",
+          "group": "2_sync@3"
+        },
+        {
+          "command": "indexEditor.repositories.pullWith",
+          "when": "view == indexEditor.repositories && viewItem == repository",
+          "group": "2_sync@4"
+        },
+        {
+          "command": "indexEditor.repositories.pushUpstream",
+          "when": "view == indexEditor.repositories && viewItem == repository",
+          "group": "2_sync@5"
+        },
+        {
+          "command": "indexEditor.repositories.pushBranch",
+          "when": "view == indexEditor.repositories && viewItem == repository",
+          "group": "2_sync@6"
+        },
+        {
+          "command": "indexEditor.repositories.push",
+          "when": "view == indexEditor.repositories && viewItem == repository",
+          "group": "2_sync@7"
+        },
+        {
+          "command": "indexEditor.repositories.switchTo",
+          "when": "view == indexEditor.repositories && viewItem == repository",
+          "group": "3_branch@1"
+        },
+        {
+          "command": "indexEditor.repositories.createBranch",
+          "when": "view == indexEditor.repositories && viewItem == repository",
+          "group": "3_branch@2"
+        },
+        {
+          "command": "indexEditor.repositories.configureBranch",
+          "when": "view == indexEditor.repositories && viewItem == repository",
+          "group": "3_branch@3"
+        },
+        {
+          "command": "indexEditor.repositories.createRemote",
+          "when": "view == indexEditor.repositories && viewItem == repository",
+          "group": "4_remote@1"
+        },
+        {
+          "command": "indexEditor.repositories.copyPath",
+          "when": "view == indexEditor.repositories && viewItem == repository",
+          "group": "9_copy@1"
+        },
+        {
+          "command": "indexEditor.repositories.createBranch",
+          "when": "view == indexEditor.repositories && viewItem == group.local",
+          "group": "1_branch@1"
+        },
+        {
+          "command": "indexEditor.repositories.createRemote",
+          "when": "view == indexEditor.repositories && viewItem == group.remotes",
+          "group": "inline@1"
+        },
+        {
+          "command": "indexEditor.repositories.createRemote",
+          "when": "view == indexEditor.repositories && viewItem == group.remotes",
+          "group": "1_remote@1"
+        },
+        {
+          "command": "indexEditor.repositories.checkout",
+          "when": "view == indexEditor.repositories && viewItem == branch.local",
+          "group": "inline@1"
+        },
+        {
+          "command": "indexEditor.repositories.pushBranch",
+          "when": "view == indexEditor.repositories && viewItem =~ /^branch\\.local/",
+          "group": "inline@2"
+        },
+        {
+          "command": "indexEditor.repositories.checkout",
+          "when": "view == indexEditor.repositories && viewItem == branch.local",
+          "group": "1_checkout@1"
+        },
+        {
+          "command": "indexEditor.repositories.createBranch",
+          "when": "view == indexEditor.repositories && viewItem =~ /^branch\\.local/",
+          "group": "2_branch@1"
+        },
+        {
+          "command": "indexEditor.repositories.renameBranch",
+          "when": "view == indexEditor.repositories && viewItem =~ /^branch\\.local/",
+          "group": "2_branch@2"
+        },
+        {
+          "command": "indexEditor.repositories.deleteBranch",
+          "when": "view == indexEditor.repositories && viewItem == branch.local",
+          "group": "2_branch@3"
+        },
+        {
+          "command": "indexEditor.repositories.configureBranch",
+          "when": "view == indexEditor.repositories && viewItem =~ /^branch\\.local/",
+          "group": "2_branch@4"
+        },
+        {
+          "command": "indexEditor.repositories.pushBranch",
+          "when": "view == indexEditor.repositories && viewItem =~ /^branch\\.local/",
+          "group": "3_sync@1"
+        },
+        {
+          "command": "indexEditor.repositories.checkout",
+          "when": "view == indexEditor.repositories && viewItem == branch.remote",
+          "group": "inline@1"
+        },
+        {
+          "command": "indexEditor.repositories.checkout",
+          "when": "view == indexEditor.repositories && viewItem == branch.remote",
+          "group": "1_checkout@1"
+        },
+        {
+          "command": "indexEditor.repositories.createBranch",
+          "when": "view == indexEditor.repositories && viewItem == branch.remote",
+          "group": "2_branch@1"
+        },
+        {
+          "command": "indexEditor.repositories.deleteRemoteBranch",
+          "when": "view == indexEditor.repositories && viewItem == branch.remote",
+          "group": "3_remote@1"
+        },
+        {
+          "command": "indexEditor.repositories.checkout",
+          "when": "view == indexEditor.repositories && viewItem == reference",
+          "group": "inline@1"
+        },
+        {
+          "command": "indexEditor.repositories.checkout",
+          "when": "view == indexEditor.repositories && viewItem == reference",
+          "group": "1_checkout@1"
+        },
+        {
+          "command": "indexEditor.repositories.createBranch",
+          "when": "view == indexEditor.repositories && viewItem == reference",
+          "group": "2_branch@1"
+        },
+        {
+          "command": "indexEditor.repositories.fetch",
+          "when": "view == indexEditor.repositories && viewItem == remote",
+          "group": "inline@1"
+        },
+        {
+          "command": "indexEditor.repositories.configureRemote",
+          "when": "view == indexEditor.repositories && viewItem == remote",
+          "group": "inline@2"
+        },
+        {
+          "command": "indexEditor.repositories.fetch",
+          "when": "view == indexEditor.repositories && viewItem == remote",
+          "group": "1_sync@1"
+        },
+        {
+          "command": "indexEditor.repositories.push",
+          "when": "view == indexEditor.repositories && viewItem == remote",
+          "group": "1_sync@2"
+        },
+        {
+          "command": "indexEditor.repositories.configureRemote",
+          "when": "view == indexEditor.repositories && viewItem == remote",
+          "group": "2_remote@1"
+        },
+        {
+          "command": "indexEditor.repositories.renameRemote",
+          "when": "view == indexEditor.repositories && viewItem == remote",
+          "group": "2_remote@2"
+        },
+        {
+          "command": "indexEditor.repositories.deleteRemote",
+          "when": "view == indexEditor.repositories && viewItem == remote",
+          "group": "2_remote@3"
+        },
+        {
+          "command": "indexEditor.repositories.fetch",
+          "when": "view == indexEditor.repositories && viewItem == remote.fetch",
+          "group": "1_sync@1"
+        },
+        {
+          "command": "indexEditor.repositories.configureRemote",
+          "when": "view == indexEditor.repositories && viewItem == remote.fetch",
+          "group": "2_remote@1"
+        },
+        {
+          "command": "indexEditor.repositories.push",
+          "when": "view == indexEditor.repositories && viewItem == remote.push",
+          "group": "1_sync@1"
+        },
+        {
+          "command": "indexEditor.repositories.configureRemote",
+          "when": "view == indexEditor.repositories && viewItem == remote.push",
+          "group": "2_remote@1"
         }
       ],
       "editor/title": [
@@ -825,6 +1364,11 @@
           "command": "indexEditor.openStagedDiff",
           "when": "!explorerResourceIsFolder && indexEditor.hasRepository",
           "group": "3_compare@11"
+        },
+        {
+          "command": "indexEditor.staging.showInStaging",
+          "when": "indexEditor.hasRepository",
+          "group": "3_compare@12"
         }
       ],
       "scm/resourceState/context": [
@@ -837,6 +1381,13 @@
           "command": "indexEditor.openStagedDiff",
           "when": "scmProvider == git && scmResourceGroup == index",
           "group": "navigation@91"
+        }
+      ],
+      "editor/title/context": [
+        {
+          "command": "indexEditor.staging.showInStaging",
+          "when": "indexEditor.hasRepository && resourceScheme == file",
+          "group": "2_indexEditor@1"
         }
       ]
     },
@@ -858,6 +1409,17 @@
         "key": "ctrl+k ctrl+alt+d",
         "mac": "cmd+k cmd+alt+d",
         "when": "indexEditor.activeDiff && !diffEditorInlineMode"
+      },
+      {
+        "command": "indexEditor.repositories.renameBranch",
+        "key": "f2",
+        "when": "focusedView == indexEditor.repositories"
+      },
+      {
+        "command": "indexEditor.repositories.deleteBranch",
+        "key": "delete",
+        "mac": "cmd+backspace",
+        "when": "focusedView == indexEditor.repositories"
       }
     ],
     "configurationDefaults": {
@@ -961,6 +1523,28 @@
           "type": "boolean",
           "default": true,
           "description": "%config.assumeUnchanged%"
+        },
+        "indexEditor.repositories.hierarchicalBranches": {
+          "type": "boolean",
+          "default": true,
+          "description": "%config.repositories.hierarchicalBranches%"
+        },
+        "indexEditor.repositories.showLatestCommit": {
+          "type": "boolean",
+          "default": false,
+          "description": "%config.repositories.showLatestCommit%"
+        },
+        "indexEditor.repositories.linkWithEditor": {
+          "type": "boolean",
+          "default": true,
+          "description": "%config.repositories.linkWithEditor%"
+        },
+        "indexEditor.repositories.pullConcurrency": {
+          "type": "number",
+          "default": 3,
+          "minimum": 1,
+          "maximum": 16,
+          "description": "%config.repositories.pullConcurrency%"
         }
       }
     },

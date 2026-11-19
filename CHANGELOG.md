@@ -1,5 +1,30 @@
 # Changelog
 
+## 0.3.0
+
+- **Git Repositories view**, as in EGit: each repository with its branch, ahead/behind and merge or
+  rebase state; local and remote-tracking branches, hierarchical or flat, optionally with their latest
+  commit; HEAD, FETCH_HEAD, ORIG_HEAD and other references; remotes with their fetch and push setup.
+  Link with Editor selects the repository of the active editor.
+- **Branches**: check out (remote branches as tracking branches, references detached), Create Branch… from any branch, tag or
+  commit with upstream and pull mode, Rename (F2), Delete (several, with a warning for unmerged
+  branches), Configure Branch…, and Switch To… with recently used branches, in several repositories
+  at once.
+- **When local changes stop a checkout**: Smart Checkout takes them over to the other branch, staged
+  and unstaged and untracked, after checking that they apply cleanly; if they would conflict, nothing
+  changes and you stay on your branch. Also Commit First… and Discard Changes and Check Out.
+- **Remotes**: Fetch with a summary of updated, new and deleted branches, Fetch From… a remote or URL,
+  Pull (several repositories in parallel), Pull… with remote, branch, merge or rebase and upstream,
+  Push to Upstream, Push Branch… with remote branch name, upstream and force-with-lease, Push… with
+  refspecs and a dry run, Delete Branch on Remote, and Create, Configure (URL, push URLs, refspecs,
+  tags, prune), Rename and Delete Remote.
+- The Staging view follows the repository of any active editor tab and of the Source Control view's
+  selection, shows the repository and branch it works on, and **Show in Git Staging** in the Explorer
+  picks the repository of a file or folder.
+- Fixed: the same repository could be listed twice, which made the extension act as if several
+  repositories were open and kept closed repositories listed.
+- Commands that change HEAD or the Index retry when Windows reports the file busy.
+
 ## 0.2.0
 
 The extension now builds on the built-in Git extension instead of a Source Control provider of its

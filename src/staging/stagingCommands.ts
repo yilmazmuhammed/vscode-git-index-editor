@@ -205,6 +205,19 @@ export function registerStagingCommands(
 			vscode.workspace.getConfiguration('indexEditor.staging').update('showUntracked', true, vscode.ConfigurationTarget.Global)),
 		register('indexEditor.staging.hideUntracked', () =>
 			vscode.workspace.getConfiguration('indexEditor.staging').update('showUntracked', false, vscode.ConfigurationTarget.Global)),
+		register('indexEditor.staging.showInStaging', async (...args: unknown[]) => {
+			// Explorer: the clicked file or folder. Command Palette: the active editor's file.
+			const [target] = resourceUris(args);
+			const uri = target ?? vscode.window.activeTextEditor?.document.uri;
+			const repository = uri && await manager.repositoryFor(uri);
+			if (!repository) {
+				vscode.window.showInformationMessage(vscode.l10n.t('{0} is not in an open Git repository.',
+					uri ? path.basename(uri.fsPath) : vscode.l10n.t('The active editor')));
+				return;
+			}
+			controller.selectRepository(repository);
+			await vscode.commands.executeCommand('indexEditor.staging.unstaged.focus');
+		}),
 		register('indexEditor.staging.selectRepository', async () => {
 			await manager.ready;
 			const picked = await vscode.window.showQuickPick(

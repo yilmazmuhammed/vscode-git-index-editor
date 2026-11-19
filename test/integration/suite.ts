@@ -5,6 +5,8 @@ import * as os from 'os';
 import * as path from 'path';
 import * as vscode from 'vscode';
 import type { ExtensionApi } from '../../src/extension';
+import { readRefs, readRemotes } from '../../src/repositories/branchService';
+import type { RepositoryTreeNode } from '../../src/repositories/repositoriesView';
 import type { Repository } from '../../src/repository';
 import type { Entry, Node } from '../../src/staging/entries';
 import { baseRefOf } from '../../src/uris';
@@ -14,18 +16,17 @@ const root = vscode.workspace.workspaceFolders![0].uri.fsPath;
 const git = (...args: string[]) => execFileSync('git', args, { cwd: root, encoding: 'utf8', stdio: 'pipe' });
 
 /**
- * For commands that rewrite .git/config. The built-in Git extension reads that file in this same
- * extension host when it changes, and on Windows a file that is open cannot be replaced. So retry,
- * and wait asynchronously, letting the extension host finish its read in the meantime.
+ * For commands that rewrite .git/config or .git/HEAD. The built-in Git extension reads those files in
+ * this same extension host when they change, and on Windows a file that is open cannot be replaced.
+ * So retry, and wait asynchronously, letting the extension host finish its read in the meantime.
  */
-async function gitConfig(...args: string[]): Promise<void> {
+async function gitBusy(...args: string[]): Promise<string> {
 	for (let attempt = 0; ; attempt++) {
 		try {
-			git(...args);
-			return;
+			return git(...args);
 		} catch (error) {
 			const stderr = String((error as { stderr?: unknown }).stderr ?? '');
-			if (attempt >= 30 || !/could not (write|lock) config file|Permission denied/.test(stderr)) {
+			if (attempt >= 30 || !/could not (write|lock) config file|unable to write symref|cannot lock ref|Permission denied/.test(stderr)) {
 				throw error;
 			}
 			await sleep(100);
@@ -373,7 +374,7 @@ const tests: [string, (context: Context) => Promise<void>][] = [
 
 	['autocrlf: staging from a CRLF working tree keeps LF in the Index', async () => {
 		commitAll('crlf.txt', 'a\nb\nc\nd\ne\n');
-		await gitConfig('config', 'core.autocrlf', 'true');
+		await gitBusy('config', 'core.autocrlf', 'true');
 		try {
 			write('crlf.txt', 'a\r\nb\r\nc\r\nd\r\nE\r\n');
 			await openedDiff('indexEditor.openUnstagedDiff', 'crlf.txt');
@@ -382,7 +383,7 @@ const tests: [string, (context: Context) => Promise<void>][] = [
 			await vscode.commands.executeCommand('indexEditor.stageChange');
 			assert.strictEqual(indexOf('crlf.txt'), 'a\nb\nc\nd\nE\n');
 		} finally {
-			await gitConfig('config', 'core.autocrlf', 'false');
+			await gitBusy('config', 'core.autocrlf', 'false');
 		}
 	}],
 
@@ -417,9 +418,9 @@ const tests: [string, (context: Context) => Promise<void>][] = [
 	['the staged diff compares with the upstream branch when chosen, and the title button switches back', async context => {
 		const remote = fs.mkdtempSync(path.join(fs.realpathSync.native(os.tmpdir()), 'egit-it-remote-'));
 		execFileSync('git', ['init', '-q', '--bare', remote]);
-		await gitConfig('remote', 'add', 'origin', remote);
+		await gitBusy('remote', 'add', 'origin', remote);
 		commitAll('upstream.txt', 'remote\n');
-		await gitConfig('push', '-q', '-u', 'origin', 'main');
+		await gitBusy('push', '-q', '-u', 'origin', 'main');
 		write('upstream.txt', 'local\n');
 		git('commit', '-q', '-am', 'local only');
 		write('upstream.txt', 'staged\n');
@@ -593,6 +594,328 @@ const tests: [string, (context: Context) => Promise<void>][] = [
 		assert.strictEqual(await vscode.commands.executeCommand('indexEditor.commit',
 			{ message: '', amend: false, signOff: false, push: true }), true);
 		await until('the remote branch moves again', () => remoteMain() === git('rev-parse', 'HEAD').trim());
+	}],
+
+	['the Staging view follows the active editor between repositories, and Show in Git Staging picks one', async context => {
+		const { staging, manager } = context.extension;
+		const second = fs.mkdtempSync(path.join(fs.realpathSync.native(os.tmpdir()), 'index-editor-it-second-'));
+		const inSecond = (...args: string[]) => execFileSync('git', args, { cwd: second, encoding: 'utf8', stdio: 'pipe' });
+		inSecond('init', '-q', '-b', 'main');
+		inSecond('config', 'user.name', 'Test');
+		inSecond('config', 'user.email', 'test@example.com');
+		inSecond('config', 'core.autocrlf', 'false');
+		const other = vscode.Uri.file(path.join(second, 'other.txt'));
+		fs.writeFileSync(other.fsPath, 'one\n');
+		inSecond('add', '.');
+		inSecond('commit', '-q', '-m', 'first');
+		fs.writeFileSync(other.fsPath, 'two\n');
+		assert.strictEqual(manager.all.length, 1, 'one entry per repository, however often the built-in extension reports it');
+		await vscode.commands.executeCommand('git.openRepository', second);
+		await until('both repositories are open', () => manager.all.length === 2, 20000);
+		const secondRepository = manager.all.find(repository => repository !== context.repository)!;
+		assert.strictEqual(secondRepository.git.root.toLowerCase(), second.toLowerCase());
+
+		await vscode.window.showTextDocument(other);
+		const where = () => {
+			const input = vscode.window.tabGroups.activeTabGroup.activeTab?.input as { uri?: vscode.Uri } | undefined;
+			return `roots=${manager.all.map(repository => repository.git.root).join(' | ')} tab=${input?.uri?.toString()} `
+				+ `current=${staging.repository?.git.root} innermost=${manager.innermost(other)?.git.root}`;
+		};
+		await until('the view follows the editor to the second repository', () => staging.repository === secondRepository)
+			.catch(error => { throw new Error(`${error.message}: ${where()}`); });
+		await secondRepository.refresh();
+		staging.update();
+		assert.deepStrictEqual(names(staging.entries('unstaged')), ['other.txt']);
+		assert.strictEqual(staging.views.unstaged.description, `${path.basename(second)} • main`);
+
+		await vscode.window.showTextDocument(uriOf('save.txt'));
+		await until('the view follows the editor back', () => staging.repository === context.repository);
+
+		await vscode.commands.executeCommand('indexEditor.openUnstagedDiff', other);
+		await until('the view follows a diff editor', () => staging.repository === secondRepository);
+
+		await vscode.commands.executeCommand('workbench.action.closeAllEditors');
+		await vscode.commands.executeCommand('indexEditor.staging.showInStaging', vscode.Uri.file(root));
+		assert.strictEqual(staging.repository, context.repository, 'Show in Git Staging on a folder picks its repository');
+		await secondRepository.refresh();
+		await synced(context);
+		assert.strictEqual(staging.repository, context.repository, 'status refreshes do not move the view');
+	}],
+
+	// ---- phase 2: Git Repositories view, branches, remotes
+
+	['the Repositories view shows branches, references and remotes', async context => {
+		const view = context.extension.repositories;
+		const repository = context.repository;
+		git('branch', 'feature/a');
+		git('branch', 'feature/b');
+		view.refresh();
+		const label = async (node: RepositoryTreeNode) => String((await view.getTreeItem(node)).label);
+		const labels = async (nodes: RepositoryTreeNode[]) => Promise.all(nodes.map(label));
+
+		const repositoryNode = (await view.getChildren()).find(node => node.repository === repository)!;
+		assert.ok(String((await view.getTreeItem(repositoryNode)).description).startsWith('main'));
+		const groups = await view.getChildren(repositoryNode);
+		assert.deepStrictEqual(groups.map(node => node.kind === 'group' && node.group), ['branches', 'references', 'remotes']);
+
+		const local = await view.getChildren({ kind: 'group', repository, group: 'local' });
+		assert.deepStrictEqual(await labels(local), ['feature', 'main']);
+		assert.deepStrictEqual(await labels(await view.getChildren(local[0])), ['a', 'b']);
+		const main = await view.getTreeItem(local[1]);
+		assert.strictEqual(main.contextValue, 'branch.local.head');
+		assert.match(String(main.description), /^origin\/main/);
+
+		const tracking = await view.getChildren({ kind: 'group', repository, group: 'remoteTracking' });
+		assert.deepStrictEqual(await labels(tracking), ['origin']);
+		assert.ok((await labels(await view.getChildren(tracking[0]))).includes('main'));
+
+		const references = await view.getChildren({ kind: 'group', repository, group: 'references' });
+		assert.ok((await labels(references)).includes('HEAD'));
+
+		const remoteNodes = await view.getChildren({ kind: 'group', repository, group: 'remotes' });
+		assert.deepStrictEqual(await labels(remoteNodes), ['origin']);
+		const specs = await view.getChildren(remoteNodes[0]);
+		assert.deepStrictEqual(specs.map(node => node.kind === 'remoteSpec' && node.direction), ['fetch', 'push']);
+		assert.strictEqual((await view.getTreeItem(specs[1])).description, git('config', '--get', 'remote.origin.url').trim());
+
+		const config = vscode.workspace.getConfiguration('indexEditor.repositories');
+		await config.update('hierarchicalBranches', false, vscode.ConfigurationTarget.Global);
+		try {
+			assert.deepStrictEqual(await labels(await view.getChildren({ kind: 'group', repository, group: 'local' })), ['feature/a', 'feature/b', 'main']);
+		} finally {
+			await config.update('hierarchicalBranches', undefined, vscode.ConfigurationTarget.Global);
+		}
+	}],
+
+	['branches are created, renamed, configured and deleted', async context => {
+		const { branches } = context.extension;
+		const repository = context.repository;
+		const config = (key: string) => {
+			try {
+				return git('config', '--get', key).trim();
+			} catch {
+				return undefined;
+			}
+		};
+		await branches.createBranch(repository, { name: 'topic', start: 'origin/main', upstreamMode: 'rebase', checkout: false });
+		assert.deepStrictEqual([config('branch.topic.remote'), config('branch.topic.merge'), config('branch.topic.rebase')], ['origin', 'refs/heads/main', 'true']);
+
+		await branches.renameBranch(repository, 'topic', 'topic2');
+		assert.strictEqual(config('branch.topic2.remote'), 'origin');
+		assert.throws(() => git('rev-parse', '--verify', '--quiet', 'refs/heads/topic'));
+
+		await branches.configureBranch(repository, 'topic2', { remote: '.', branch: 'main', mode: 'merge' });
+		assert.deepStrictEqual([config('branch.topic2.remote'), config('branch.topic2.merge'), config('branch.topic2.rebase')], ['.', 'refs/heads/main', undefined]);
+		assert.strictEqual(await branches.pullMode(repository, 'topic2'), 'merge');
+		await branches.configureBranch(repository, 'topic2', undefined);
+		assert.strictEqual(config('branch.topic2.remote'), undefined);
+
+		assert.strictEqual(await branches.checkout(repository, 'topic2'), true);
+		assert.strictEqual(git('symbolic-ref', '--short', 'HEAD').trim(), 'topic2');
+		write('only-on-topic.txt', 'x\n');
+		git('add', 'only-on-topic.txt');
+		git('commit', '-q', '-m', 'only on topic2');
+		await branches.checkout(repository, 'main');
+		const result = await branches.deleteBranches(repository, ['topic2', 'feature/a'], false);
+		assert.deepStrictEqual(result, { deleted: ['feature/a'], unmerged: ['topic2'] });
+		await branches.deleteBranches(repository, ['topic2', 'feature/b'], true);
+		assert.throws(() => git('rev-parse', '--verify', '--quiet', 'refs/heads/topic2'));
+	}],
+
+	['remote branches check out as tracking branches; local changes stop or are discarded; recent branches', async context => {
+		const { branches } = context.extension;
+		const repository = context.repository;
+		git('push', '-q', 'origin', 'main:refs/heads/remote-only');
+		git('fetch', '-q', 'origin');
+		const remoteOnly = (await readRefs(repository)).find(ref => ref.name === 'origin/remote-only')!;
+		await branches.checkoutRemote(repository, remoteOnly);
+		assert.strictEqual(git('symbolic-ref', '--short', 'HEAD').trim(), 'remote-only');
+		assert.strictEqual(git('config', '--get', 'branch.remote-only.merge').trim(), 'refs/heads/remote-only');
+		await branches.checkout(repository, 'main');
+
+		commitAll('differs.txt', 'main\n');
+		git('branch', 'differs');
+		await gitBusy('switch', '-q', 'differs');
+		write('differs.txt', 'branch\n');
+		git('commit', '-q', '-am', 'differs');
+		await gitBusy('switch', '-q', 'main');
+		write('differs.txt', 'local change\n');
+		await assert.rejects(branches.checkout(repository, 'differs', { onDirty: 'fail' }), /overwritten/);
+		assert.strictEqual(await branches.checkout(repository, 'differs', { onDirty: 'force' }), true);
+		assert.strictEqual(read('differs.txt'), 'branch\n');
+		await branches.checkout(repository, 'main');
+
+		assert.deepStrictEqual((await branches.recent(repository, ['main', 'differs', 'remote-only'])).slice(0, 3), ['main', 'differs', 'remote-only']);
+	}],
+
+	['fetch reports the updated, new and deleted remote-tracking branches', async context => {
+		const remoteUrl = git('config', '--get', 'remote.origin.url').trim();
+		const clone = fs.mkdtempSync(path.join(fs.realpathSync.native(os.tmpdir()), 'index-editor-it-clone-'));
+		execFileSync('git', ['clone', '-q', '-b', 'main', remoteUrl, clone]);
+		const inClone = (...args: string[]) => execFileSync('git', args, { cwd: clone, encoding: 'utf8', stdio: 'pipe' });
+		inClone('config', 'user.name', 'Elsewhere');
+		inClone('config', 'user.email', 'elsewhere@example.com');
+		fs.writeFileSync(path.join(clone, 'elsewhere.txt'), 'from elsewhere\n');
+		inClone('add', '.');
+		inClone('commit', '-q', '-m', 'from elsewhere');
+		inClone('push', '-q', 'origin', 'HEAD:main', 'HEAD:refs/heads/from-elsewhere', ':refs/heads/remote-only');
+
+		const changes = await context.extension.remotes.fetch(context.repository, { remote: 'origin', prune: true });
+		assert.ok(changes.updated.includes('refs/remotes/origin/main'), JSON.stringify(changes));
+		assert.ok(changes.created.includes('refs/remotes/origin/from-elsewhere'), JSON.stringify(changes));
+		assert.ok(changes.deleted.includes('refs/remotes/origin/remote-only'), JSON.stringify(changes));
+		(context as { clone?: string }).clone = clone;
+	}],
+
+	['Pull… rebases, stops on conflicts, and can set the upstream', async context => {
+		const { remotes } = context.extension;
+		const repository = context.repository;
+		const clone = (context as { clone?: string }).clone!;
+		const inClone = (...args: string[]) => execFileSync('git', args, { cwd: clone, encoding: 'utf8', stdio: 'pipe' });
+		await repository.refresh();
+		const localOnly = git('log', '-1', '--format=%s', 'HEAD');
+		assert.strictEqual(await remotes.pullFrom(repository, { remote: 'origin', branch: 'main', mode: 'rebase', setUpstream: false }), 'done');
+		assert.strictEqual(git('rev-list', '--count', 'HEAD..origin/main').trim(), '0', 'everything on origin/main is pulled');
+		assert.strictEqual(git('log', '-1', '--format=%s', 'HEAD'), localOnly, 'the local commit is replayed on top');
+		assert.strictEqual(git('rev-list', '--count', '--merges', 'origin/main..HEAD').trim(), '0', 'rebased, not merged');
+
+		inClone('pull', '-q', '--no-rebase', 'origin', 'main');
+		fs.writeFileSync(path.join(clone, 'clash.txt'), 'remote\n');
+		inClone('add', '.');
+		inClone('commit', '-q', '-m', 'clash on the remote');
+		inClone('push', '-q', 'origin', 'HEAD:main');
+		commitAll('clash.txt', 'local\n');
+		assert.strictEqual(await remotes.pullFrom(repository, { remote: 'origin', branch: 'main', mode: 'merge', setUpstream: false }), 'conflicts');
+		assert.strictEqual(await repository.git.operation(), 'merge');
+		git('merge', '--abort');
+		git('reset', '-q', '--hard', 'origin/main');
+
+		git('branch', 'pull-target', 'origin/main');
+		await gitBusy('switch', '-q', 'pull-target');
+		await repository.refresh();
+		assert.strictEqual(await remotes.pullFrom(repository, { remote: 'origin', branch: 'from-elsewhere', mode: 'rebase', setUpstream: true }), 'done');
+		assert.strictEqual(git('config', '--get', 'branch.pull-target.merge').trim(), 'refs/heads/from-elsewhere');
+		assert.strictEqual(git('config', '--get', 'branch.pull-target.rebase').trim(), 'true');
+		await gitBusy('switch', '-q', 'main');
+		await repository.refresh();
+	}],
+
+	['Push Branch… sets the upstream, force-pushes with lease, and refspecs push and delete', async context => {
+		const { remotes } = context.extension;
+		const repository = context.repository;
+		const remoteUrl = git('config', '--get', 'remote.origin.url').trim();
+		const inRemote = (...args: string[]) => execFileSync('git', ['--git-dir', remoteUrl, ...args], { encoding: 'utf8', stdio: 'pipe' });
+		git('branch', 'pushed');
+		await gitBusy('switch', '-q', 'pushed');
+		commitAll('pushed.txt', '1\n');
+		await gitBusy('switch', '-q', 'main');
+		await repository.refresh();
+
+		await remotes.pushBranch(repository, { local: 'pushed', remote: 'origin', remoteBranch: 'pushed-remote', upstreamMode: 'rebase', force: false });
+		assert.strictEqual(inRemote('rev-parse', 'refs/heads/pushed-remote'), git('rev-parse', 'pushed'));
+		assert.strictEqual(git('config', '--get', 'branch.pushed.merge').trim(), 'refs/heads/pushed-remote');
+		assert.strictEqual(git('config', '--get', 'branch.pushed.rebase').trim(), 'true');
+
+		await gitBusy('switch', '-q', 'pushed');
+		git('commit', '-q', '--amend', '-m', 'pushed, rewritten');
+		await gitBusy('switch', '-q', 'main');
+		await assert.rejects(remotes.pushBranch(repository, { local: 'pushed', remote: 'origin', remoteBranch: 'pushed-remote', upstreamMode: 'rebase', force: false }));
+		await remotes.pushBranch(repository, { local: 'pushed', remote: 'origin', remoteBranch: 'pushed-remote', upstreamMode: 'rebase', force: true });
+		assert.strictEqual(inRemote('rev-parse', 'refs/heads/pushed-remote'), git('rev-parse', 'pushed'));
+
+		await remotes.pushRefspecs(repository, 'origin', ['pushed:refs/heads/extra'], false);
+		assert.strictEqual(inRemote('rev-parse', 'refs/heads/extra'), git('rev-parse', 'pushed'));
+		await remotes.deleteRemoteBranch(repository, 'origin', 'extra');
+		assert.throws(() => inRemote('rev-parse', '--verify', '--quiet', 'refs/heads/extra'));
+		assert.throws(() => git('rev-parse', '--verify', '--quiet', 'refs/remotes/origin/extra'), 'the remote-tracking branch is pruned');
+	}],
+
+	['remotes are added, configured, renamed and removed', async context => {
+		const { remotes } = context.extension;
+		const repository = context.repository;
+		const other = fs.mkdtempSync(path.join(fs.realpathSync.native(os.tmpdir()), 'index-editor-it-bare-'));
+		execFileSync('git', ['init', '-q', '--bare', other]);
+		await remotes.addRemote(repository, 'second', other);
+		const wanted = {
+			name: 'second',
+			url: other,
+			pushUrls: ['https://one.example.com/a.git', 'https://two.example.com/a.git'],
+			fetch: ['+refs/heads/*:refs/remotes/second/*'],
+			push: ['refs/heads/main:refs/heads/main'],
+			tagOpt: '--no-tags',
+			prune: 'true'
+		};
+		await remotes.saveRemote(repository, wanted);
+		assert.deepStrictEqual(git('config', '--get-all', 'remote.second.pushurl').trim().split(/\r?\n/), wanted.pushUrls);
+		assert.strictEqual(git('config', '--get', 'remote.second.tagopt').trim(), '--no-tags');
+		assert.deepStrictEqual((await readRemotes(repository)).find(remote => remote.name === 'second'), wanted);
+
+		await remotes.saveRemote(repository, { ...wanted, pushUrls: [], push: [], tagOpt: '', prune: '' });
+		assert.throws(() => git('config', '--get-all', 'remote.second.pushurl'));
+		assert.throws(() => git('config', '--get', 'remote.second.prune'));
+
+		await remotes.renameRemote(repository, 'second', 'third');
+		assert.deepStrictEqual((await readRemotes(repository)).map(remote => remote.name).sort(), ['origin', 'third']);
+		await remotes.removeRemote(repository, 'third');
+		assert.deepStrictEqual((await readRemotes(repository)).map(remote => remote.name), ['origin']);
+	}],
+
+	['Pull on several repositories pulls each and reports the ones that failed', async context => {
+		const { remotes, manager } = context.extension;
+		await context.repository.refresh();
+		const other = manager.all.find(repository => repository !== context.repository)!;
+		const failures = await remotes.pullAll(manager.all, 2);
+		assert.deepStrictEqual(failures.map(failure => failure.repository), [other], 'the repository without an upstream fails');
+		assert.strictEqual(git('rev-parse', 'HEAD'), git('rev-parse', 'origin/main'));
+	}],
+
+	['Smart Checkout carries local changes over, and leaves the branch alone when they would conflict', async context => {
+		const { branches } = context.extension;
+		const repository = context.repository;
+		const head = () => git('symbolic-ref', '--short', 'HEAD').trim();
+		commitAll('smart.txt', 'a\nb\nc\nd\ne\nf\ng\n');
+		git('branch', 'smart-target');
+		await gitBusy('switch', '-q', 'smart-target');
+		write('smart.txt', 'A\nb\nc\nd\ne\nf\ng\n');
+		commitAll('in-target.txt', 'tracked in the target\n');
+		git('commit', '-q', '-am', 'smart target');
+		await gitBusy('switch', '-q', 'main');
+
+		// a staged change in another part of the file, and a new untracked file
+		write('smart.txt', 'a\nb\nc\nd\ne\nf\nG\n');
+		git('add', 'smart.txt');
+		write('smart-new.txt', 'new\n');
+		await repository.refresh();
+		assert.strictEqual(await branches.checkout(repository, 'smart-target', { onDirty: 'smart' }), true);
+		assert.strictEqual(head(), 'smart-target');
+		assert.strictEqual(read('smart.txt'), 'A\nb\nc\nd\ne\nf\nG\n');
+		assert.strictEqual(indexOf('smart.txt'), 'A\nb\nc\nd\ne\nf\nG\n', 'the staged change stays staged');
+		assert.strictEqual(read('smart-new.txt'), 'new\n');
+		assert.strictEqual(git('stash', 'list'), '', 'the stash is dropped');
+
+		git('reset', '-q', '--hard');
+		fs.unlinkSync(path.join(root, 'smart-new.txt'));
+		await gitBusy('switch', '-q', 'main');
+
+		// a change to the same line the target changed
+		write('smart.txt', 'X\nb\nc\nd\ne\nf\ng\n');
+		await repository.refresh();
+		assert.strictEqual(await branches.checkout(repository, 'smart-target', { onDirty: 'smart' }), false);
+		assert.strictEqual(head(), 'main', 'the branch does not change');
+		assert.strictEqual(read('smart.txt'), 'X\nb\nc\nd\ne\nf\ng\n', 'the local change is back in place');
+		assert.strictEqual(git('stash', 'list'), '');
+		git('checkout', '--', 'smart.txt');
+
+		// an untracked file that the target tracks
+		write('in-target.txt', 'mine\n');
+		await repository.refresh();
+		assert.strictEqual(await branches.checkout(repository, 'smart-target', { onDirty: 'smart' }), false);
+		assert.strictEqual(head(), 'main');
+		assert.strictEqual(read('in-target.txt'), 'mine\n');
+		assert.strictEqual(git('stash', 'list'), '');
+		fs.unlinkSync(path.join(root, 'in-target.txt'));
+		assert.throws(() => git('rev-parse', '--verify', '--quiet', 'refs/git-index-editor/smart-checkout'), 'no saved changes are left behind');
+		await repository.refresh();
 	}]
 ];
 

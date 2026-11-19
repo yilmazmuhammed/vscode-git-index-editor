@@ -25,7 +25,8 @@ The **Git Staging** icon in the activity bar opens a view with three parts:
 - A file with both staged and unstaged changes is in both lists, marked *partially staged*.
 - The title bar has Add All, Remove All, show or hide untracked files, Filter and Refresh. Its `…` menu has the presentation (list, tree, compact tree) and the sort order.
 - The filter matches part of a path; `*` stands for any text and `?` for one character. The title shows how many files are shown out of how many.
-- With several repositories open, the view follows the repository of the active editor. You can also pick one from the title bar.
+- With several repositories open, the view follows the repository of the active editor (any kind of editor tab, diffs included) and the repository you select in the Source Control view. Both lists and the commit area show the repository and branch they work on.
+- VS Code does not tell extensions which file or folder is selected in the Explorer, so a folder counts only when you right-click it and choose **Show in Git Staging**. Clicking a file in the Explorer opens it, so the view follows it. You can also pick a repository from the title bar.
 
 **Context menu**, as in EGit: add to or remove from the Index, open the working tree version, compare
 with HEAD, compare with each other, replace with the file in the Index, replace with the HEAD
@@ -34,6 +35,34 @@ untrack, copy path, reveal in the Explorer.
 
 - **No Assume Unchanged…** in the `…` menu of Unstaged Changes clears the assume-unchanged flag.
 - Files with that flag show an `AU` badge in the Explorer.
+
+## Git Repositories view
+
+The first part of the Git Staging container lists the open repositories, as EGit's Git Repositories
+view does:
+
+| Node | Shows | Actions |
+| --- | --- | --- |
+| **Repository** | Branch, ↑ahead ↓behind, and MERGING / REBASING | Fetch, Fetch From…, Pull, Pull…, Push to Upstream, Push Branch…, Push…, Switch To…, Create Branch…, Configure Branch…, Create Remote…, Show in Git Staging, Copy Path |
+| **Branches › Local** | Branches, in folders at each `/` or as a list; upstream and ↑↓ | Check Out, Create Branch…, Rename (F2), Delete (Del, several at once), Configure Branch…, Push Branch… |
+| **Branches › Remote Tracking** | Remote-tracking branches | Check Out (as a local branch that tracks it), Create Branch…, Delete Branch on Remote |
+| **References** | HEAD, FETCH_HEAD, ORIG_HEAD, MERGE_HEAD… | Check Out (detached), Create Branch… |
+| **Remotes** | Each remote with its Fetch and Push URLs and refspecs | Fetch, Push…, Configure Remote…, Rename, Delete |
+
+- **Selecting several repositories** lets Fetch, Pull and Switch To work on all of them; Pull runs a few at a time (`indexEditor.repositories.pullConcurrency`).
+- **Switch To…** lists recently checked out branches first, read from the reflog.
+- **Create Branch…** starts from any branch, tag or commit, suggests a name, and can track a remote branch with merge or rebase.
+- **Configure Branch…** sets the upstream remote and branch and the pull mode, or removes the upstream.
+- **When local changes stop a checkout**, you can choose:
+  - **Smart Checkout** takes your changes, staged and unstaged and untracked files included, over to the other branch. It checks first: if they would conflict with that branch, nothing changes and you stay on your branch with your changes.
+  - **Commit First…** stops and opens the commit area.
+  - **Discard Changes and Check Out** throws the changes away.
+- **Fetch** reports which remote-tracking branches were updated, created or deleted.
+- **Pull…** fetches a branch of a remote, merges or rebases onto it, and can make it the upstream. When Git stops on conflicts, the Staging view shows them.
+- **Push Branch…** asks for the remote, the remote branch name, the upstream mode and whether to force push with lease. **Push…** takes refspecs; a refspec like `:refs/heads/old` deletes a remote branch, and **Dry Run** shows the result in the terminal.
+- **Configure Remote…** opens an editor for the URL, push URLs, fetch and push refspecs, tag fetching and pruning, with Save, Save and Fetch, Save and Push and Dry Run.
+- Fetch, pull and push go through the built-in Git extension, so VS Code asks for credentials as usual.
+- The title bar switches between hierarchical and flat branches; its `…` menu shows the latest commit of each branch and turns Link with Editor on or off.
 
 ## Editing the Index
 
@@ -111,7 +140,11 @@ While the inline view is on:
 | `indexEditor.staging.presentation` | `list` | How files are listed: `list`, `tree` or `compactTree`. |
 | `indexEditor.staging.sortBy` | `name` | Order: `name` (by path) or `status` (by kind of change). |
 | `indexEditor.staging.showUntracked` | `true` | Whether untracked files are shown. |
-| `indexEditor.staging.followActiveEditor` | `true` | Whether the view follows the repository of the active editor. |
+| `indexEditor.staging.followActiveEditor` | `true` | Whether the view follows the repository of the active editor and of the Source Control selection. |
+| `indexEditor.repositories.hierarchicalBranches` | `true` | Branches in folders at each `/`, or as a list. |
+| `indexEditor.repositories.showLatestCommit` | `false` | Whether the latest commit is shown next to each branch. |
+| `indexEditor.repositories.linkWithEditor` | `true` | Whether the Git Repositories view selects the repository of the active editor. |
+| `indexEditor.repositories.pullConcurrency` | `3` | How many repositories Pull updates at the same time. |
 | `indexEditor.commit.signOffByDefault` | `false` | Whether Sign-off starts checked. |
 | `indexEditor.commit.problemCheck` | `off` | Problem check before committing: `off`, `warn` or `block`. |
 | `indexEditor.commit.problemSeverity` | `error` | The least severe problem that counts: `error` or `warning`. |

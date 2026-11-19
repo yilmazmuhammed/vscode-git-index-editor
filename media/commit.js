@@ -19,6 +19,10 @@
 		return node;
 	}
 
+	const repositoryText = el('span');
+	const changeRepository = el('button', { type: 'button', class: 'link', hidden: '' }, [t.changeRepository]);
+	const repositoryLine = el('div', { class: 'repository' }, [repositoryText, changeRepository]);
+
 	const bannerText = el('span');
 	const continueButton = el('button', { type: 'button', class: 'secondary' }, [t.continue]);
 	const abortButton = el('button', { type: 'button', class: 'secondary' }, [t.abort]);
@@ -41,6 +45,7 @@
 	const noRepository = el('div', { class: 'empty', hidden: '' }, [t.noRepository]);
 
 	const form = el('div', { class: 'form' }, [
+		repositoryLine,
 		banner,
 		el('div', { class: 'heading' }, [el('label', { for: 'message' }, [t.message]), historyButton]),
 		message,
@@ -75,6 +80,9 @@
 		const hasRepository = !!state.repository;
 		noRepository.hidden = hasRepository;
 		form.hidden = !hasRepository;
+
+		repositoryText.textContent = format(t.repository, state.repositoryLabel ?? state.repository ?? '');
+		changeRepository.hidden = !state.multipleRepositories;
 
 		const operation = state.operation;
 		banner.hidden = operation === 'none';
@@ -136,6 +144,7 @@
 	continueButton.addEventListener('click', () => vscode.postMessage({ type: 'continue' }));
 	abortButton.addEventListener('click', () => vscode.postMessage({ type: 'abort' }));
 	historyButton.addEventListener('click', () => vscode.postMessage({ type: 'history' }));
+	changeRepository.addEventListener('click', () => vscode.postMessage({ type: 'selectRepository' }));
 	amend.addEventListener('change', () => {
 		if (amend.checked) {
 			vscode.postMessage({ type: 'amendChanged', checked: true });

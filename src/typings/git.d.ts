@@ -84,11 +84,36 @@ export interface RepositoryState {
 	readonly onDidChange: Event<void>;
 }
 
+export interface RepositoryUIState {
+	/** Whether the repository is selected in the Source Control view. */
+	readonly selected: boolean;
+	readonly onDidChange: Event<void>;
+}
+
+export const enum ForcePushMode {
+	Force,
+	ForceWithLease,
+	ForceWithLeaseIfIncludes
+}
+
+export interface FetchOptions {
+	/** A remote name, or a URL. */
+	remote?: string;
+	ref?: string;
+	all?: boolean;
+	prune?: boolean;
+	depth?: number;
+}
+
 export interface Repository {
 	readonly rootUri: Uri;
 	readonly state: RepositoryState;
+	readonly ui: RepositoryUIState;
 	status(): Promise<void>;
-	push(remoteName?: string, branchName?: string, setUpstream?: boolean): Promise<void>;
+	fetch(options?: FetchOptions): Promise<void>;
+	pull(unshallow?: boolean): Promise<void>;
+	/** `branchName` is passed to git push as it is, so it can be any refspec. */
+	push(remoteName?: string, branchName?: string, setUpstream?: boolean, force?: ForcePushMode): Promise<void>;
 }
 
 export type APIState = 'uninitialized' | 'initialized';

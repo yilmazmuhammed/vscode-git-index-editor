@@ -4,7 +4,7 @@ import * as os from 'os';
 import * as path from 'path';
 
 export class GitError extends Error {
-	constructor(message: string, readonly exitCode: number | null) {
+	constructor(message: string, readonly exitCode: number | null, readonly stdout: Buffer = Buffer.alloc(0)) {
 		super(message);
 	}
 }
@@ -32,6 +32,13 @@ interface RunOptions {
 }
 
 const LOCK_RETRIES = 6;
+
+/**
+ * Failures to replace a file in .git (index, HEAD, a ref, config) because another process has it
+ * open. On Windows that happens while the built-in Git extension reads the file, and retrying shortly
+ * after succeeds. Git takes such files with a lock file and renames it at the end, so nothing changed.
+ */
+const BUSY_FILE = /index\.lock|unable to write symref|could not write config file|cannot lock ref|Unable to create '.*\.lock'|Permission denied/i;
 
 /** The submodule mode in trees and in the Index. */
 export const GITLINK_MODE = '160000';
@@ -90,7 +97,7 @@ export class GitRepository {
 					return;
 				}
 				const message = Buffer.concat(stderr).toString('utf8').trim() || `git ${args[0]} exited with code ${code}`;
-				reject(new GitError(message, code));
+				reject(new GitError(message, code, Buffer.concat(stdout)));
 			});
 			child.stdin.end(options.input);
 		});
@@ -106,7 +113,7 @@ export class GitRepository {
 				try {
 					return await operation();
 				} catch (error) {
-					if (retry >= LOCK_RETRIES || !(error instanceof GitError) || !error.message.includes('index.lock')) {
+					if (retry >= LOCK_RETRIES || !(error instanceof GitError) || !BUSY_FILE.test(error.message)) {
 						this.log(`git failed: ${error instanceof Error ? error.message : error}`);
 						throw error;
 					}
@@ -386,6 +393,83 @@ export class GitRepository {
 		const committer = options.committer ? parseIdent(options.committer) : undefined;
 		const env = committer ? { GIT_COMMITTER_NAME: committer.name, GIT_COMMITTER_EMAIL: committer.email } : undefined;
 		return this.exclusive(() => this.run(args, { input: options.message, env }));
+	}
+
+	/** Runs a command that changes the Index or HEAD (checkout, merge, branch...), serialized with Index writes. */
+	mutate(args: readonly string[], options: RunOptions = {}): Promise<Buffer> {
+		return this.exclusive(() => this.run(args, options));
+	}
+
+	/** Output of `git for-each-ref` with a format, empty in a repository without refs. */
+	async forEachRef(format: string, patterns: readonly string[]): Promise<string> {
+		return (await this.run(['for-each-ref', `--format=${format}`, ...patterns])).toString('utf8');
+	}
+
+	/** `git config -z --get-regexp`, or an empty string when nothing matches. */
+	async configRegexp(pattern: string): Promise<string> {
+		try {
+			return (await this.run(['config', '-z', '--get-regexp', pattern])).toString('utf8');
+		} catch (error) {
+			if (error instanceof GitError && error.exitCode === 1) {
+				return '';
+			}
+			throw error;
+		}
+	}
+
+	/** Sets a configuration value, or removes every value of the key when `value` is undefined. */
+	async setConfig(key: string, value: string | undefined): Promise<void> {
+		if (value === undefined) {
+			await this.unsetConfig(key);
+		} else {
+			await this.run(['config', key, value]);
+		}
+	}
+
+	/** Replaces all values of a multi-valued key. */
+	async setConfigValues(key: string, values: readonly string[]): Promise<void> {
+		await this.unsetConfig(key);
+		for (const value of values) {
+			await this.run(['config', '--add', key, value]);
+		}
+	}
+
+	private async unsetConfig(key: string): Promise<void> {
+		try {
+			await this.run(['config', '--unset-all', key]);
+		} catch (error) {
+			if (!(error instanceof GitError) || error.exitCode !== 5) {
+				throw error; // 5: the key is not set
+			}
+		}
+	}
+
+	/** The commit a ref points to, or undefined if it does not resolve. */
+	async resolveCommit(ref: string): Promise<string | undefined> {
+		try {
+			return (await this.run(['rev-parse', '--verify', '--quiet', `${ref}^{commit}`])).toString('utf8').trim() || undefined;
+		} catch {
+			return undefined;
+		}
+	}
+
+	/** The subjects of the HEAD reflog, newest first; empty before the first commit. */
+	async reflogSubjects(limit: number): Promise<string[]> {
+		try {
+			return (await this.run(['reflog', `-n${limit}`, '--format=%gs', 'HEAD'])).toString('utf8').split(/\r?\n/).filter(Boolean);
+		} catch {
+			return [];
+		}
+	}
+
+	/** Whether Git accepts a name for a new branch. */
+	async isValidBranchName(name: string): Promise<boolean> {
+		try {
+			await this.run(['check-ref-format', '--branch', name]);
+			return true;
+		} catch {
+			return false;
+		}
 	}
 
 	rebaseContinue(): Promise<unknown> {

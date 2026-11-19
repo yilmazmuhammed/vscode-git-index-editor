@@ -1,0 +1,45 @@
+.remote {
+	max-width: 720px;
+	padding: 8px 0;
+	gap: 14px;
+}
+
+.remote h2 {
+	margin: 0 0 4px;
+	font-size: 1.3em;
+	font-weight: 600;
+}
+
+.field {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+}
+
+.field label {
+	font-weight: 600;
+}
+
+select {
+	box-sizing: border-box;
+	width: 100%;
+	color: var(--vscode-dropdown-foreground);
+	background: var(--vscode-dropdown-background);
+	border: 1px solid var(--vscode-dropdown-border, transparent);
+	border-radius: 2px;
+	padding: 4px 6px;
+	font-family: inherit;
+	font-size: inherit;
+}
+
+.result {
+	padding: 6px 8px;
+	border-radius: 2px;
+	border: 1px solid var(--vscode-inputValidation-infoBorder, var(--vscode-focusBorder));
+	background: var(--vscode-inputValidation-infoBackground, transparent);
+}
+
+.result.error {
+	border-color: var(--vscode-inputValidation-errorBorder, var(--vscode-errorForeground));
+	background: var(--vscode-inputValidation-errorBackground, transparent);
+}

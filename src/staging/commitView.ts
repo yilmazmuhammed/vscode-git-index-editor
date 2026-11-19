@@ -9,6 +9,9 @@ import { StagingController } from './stagingView';
 /** What the webview shows; sent whenever the repository or its state changes. */
 interface ViewState {
 	readonly repository: string | undefined;
+	/** Repository name and branch, as the Staging lists show it. */
+	readonly repositoryLabel: string | undefined;
+	readonly multipleRepositories: boolean;
 	readonly operation: Operation;
 	readonly stagedCount: number;
 	readonly authorDefault: string;
@@ -25,7 +28,8 @@ type FromWebview =
 	| { type: 'history' }
 	| { type: 'draft'; message: string }
 	| { type: 'continue' }
-	| { type: 'abort' };
+	| { type: 'abort' }
+	| { type: 'selectRepository' };
 
 const DRAFTS_KEY = 'indexEditor.commit.drafts';
 
@@ -52,7 +56,9 @@ function strings(): Record<string, string> {
 		cherryPick: t('Cherry-picking: resolve the conflicts, add the files to the Index and commit.'),
 		revert: t('Reverting: resolve the conflicts, add the files to the Index and commit.'),
 		continue: t('Continue'),
-		abort: t('Abort')
+		abort: t('Abort'),
+		repository: t('Repository: {0}'),
+		changeRepository: t('Change')
 	};
 }
 
@@ -70,7 +76,7 @@ export class CommitViewProvider implements vscode.WebviewViewProvider, vscode.Di
 
 	constructor(
 		private readonly context: vscode.ExtensionContext,
-		manager: RepositoryManager,
+		private readonly manager: RepositoryManager,
 		private readonly controller: StagingController,
 		private readonly commits: CommitService,
 		private readonly log: vscode.LogOutputChannel
@@ -82,6 +88,7 @@ export class CommitViewProvider implements vscode.WebviewViewProvider, vscode.Di
 					void this.postState();
 				}
 			}),
+			manager.onDidChangeRepositories(() => void this.postState()),
 			vscode.workspace.onDidChangeConfiguration(event => {
 				if (event.affectsConfiguration('indexEditor.commit')) {
 					void this.postState();
@@ -167,6 +174,8 @@ export class CommitViewProvider implements vscode.WebviewViewProvider, vscode.Di
 		const ident = await repository?.git.userIdent() ?? '';
 		return {
 			repository: repository?.name,
+			repositoryLabel: this.controller.describeRepository(),
+			multipleRepositories: this.manager.all.length > 1,
 			operation: repository ? await repository.git.operation() : 'none',
 			stagedCount: repository?.api.state.indexChanges.length ?? 0,
 			authorDefault: ident,
@@ -256,6 +265,9 @@ export class CommitViewProvider implements vscode.WebviewViewProvider, vscode.Di
 					await repository.git.rebaseContinue();
 					await repository.refresh();
 				}
+				return;
+			case 'selectRepository':
+				await vscode.commands.executeCommand('indexEditor.staging.selectRepository');
 				return;
 			case 'abort':
 				if (repository && await this.confirmAbort(repository)) {

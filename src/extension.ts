@@ -4,6 +4,11 @@ import { AssumeUnchangedDecorations } from './assumeUnchangedDecorations';
 import { onDidChangeDiffMode } from './diffMode';
 import { EmptyFileSystem, IndexFileSystem } from './indexFileSystem';
 import { IndexEditors } from './indexEditors';
+import { BranchService } from './repositories/branchService';
+import { RemoteEditors } from './repositories/remoteEditor';
+import { RemoteService } from './repositories/remoteService';
+import { registerRepositoriesCommands } from './repositories/repositoriesCommands';
+import { RepositoriesView } from './repositories/repositoriesView';
 import { RepositoryManager } from './repository';
 import { CommitRequest, CommitService } from './staging/commitService';
 import { CommitViewProvider } from './staging/commitView';
@@ -17,6 +22,9 @@ export interface ExtensionApi {
 	readonly manager: RepositoryManager;
 	readonly staging: StagingController;
 	readonly editors: IndexEditors;
+	readonly repositories: RepositoriesView;
+	readonly branches: BranchService;
+	readonly remotes: RemoteService;
 }
 
 function isCommitRequest(value: unknown): value is CommitRequest {
@@ -64,12 +72,19 @@ export async function activate(context: vscode.ExtensionContext): Promise<Extens
 	const staging = new StagingController(manager, stagingActions);
 	const commits = new CommitService(context.globalState, log);
 	const commitView = new CommitViewProvider(context, manager, staging, commits, log);
+	const repositories = new RepositoriesView(manager);
+	const branches = new BranchService(log);
+	const remotes = new RemoteService(branches, log);
+	const remoteEditors = new RemoteEditors(context, remotes, repository => repositories.refresh(repository));
 
 	context.subscriptions.push(
 		manager,
 		editors,
 		staging,
 		commitView,
+		repositories,
+		remoteEditors,
+		registerRepositoriesCommands(register, manager, repositories, branches, remotes, remoteEditors, commits, staging),
 		new AssumeUnchangedDecorations(manager, log),
 		vscode.workspace.registerFileSystemProvider(INDEX_SCHEME, indexFileSystem, { isCaseSensitive }),
 		vscode.workspace.registerFileSystemProvider(EMPTY_SCHEME, new EmptyFileSystem(), { isCaseSensitive, isReadonly: true }),
@@ -88,7 +103,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<Extens
 		register('indexEditor.commitAmend', () => commitView.submit(true)),
 		register('indexEditor.focusCommit', () => vscode.commands.executeCommand(`${CommitViewProvider.viewId}.focus`))
 	);
-	return { manager, staging, editors };
+	return { manager, staging, editors, repositories, branches, remotes };
 }
 
 export function deactivate(): void { }

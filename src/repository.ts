@@ -14,11 +14,17 @@ export class Repository implements vscode.Disposable {
 	private readonly didChange = new vscode.EventEmitter<void>();
 	/** Fires whenever the built-in extension has re-read the repository's status. */
 	readonly onDidChange = this.didChange.event;
-	private readonly disposables: vscode.Disposable[] = [this.didChange];
+	private readonly didChangeSelection = new vscode.EventEmitter<void>();
+	/** The repository was selected or deselected in the Source Control view. */
+	readonly onDidChangeSelection = this.didChangeSelection.event;
+	private readonly disposables: vscode.Disposable[] = [this.didChange, this.didChangeSelection];
 
 	constructor(readonly api: ApiRepository, readonly git: GitRepository) {
 		this.rootUri = vscode.Uri.file(git.root);
 		this.disposables.push(api.state.onDidChange(() => this.didChange.fire()));
+		if (api.ui) {
+			this.disposables.push(api.ui.onDidChange(() => this.didChangeSelection.fire()));
+		}
 	}
 
 	get name(): string {
@@ -48,9 +54,18 @@ export class Repository implements vscode.Disposable {
 	}
 }
 
-/** Follows the repositories of the built-in Git extension. */
+/** Identifies a repository by its root folder, compared the way the file system does. */
+function rootKey(root: vscode.Uri): string {
+	const normalized = path.normalize(root.fsPath);
+	return process.platform === 'linux' ? normalized : normalized.toLowerCase();
+}
+
+/**
+ * Follows the repositories of the built-in Git extension. Its API hands out a new wrapper object
+ * for the same repository on every access and event, so repositories are matched by root folder.
+ */
 export class RepositoryManager implements vscode.Disposable {
-	private readonly repositories = new Map<ApiRepository, Promise<Repository | undefined>>();
+	private readonly repositories = new Map<string, Promise<Repository | undefined>>();
 	private readonly opened: Repository[] = [];
 
 	private readonly didChange = new vscode.EventEmitter<Repository>();
@@ -59,7 +74,14 @@ export class RepositoryManager implements vscode.Disposable {
 	private readonly didChangeRepositories = new vscode.EventEmitter<void>();
 	/** A repository was opened or closed. */
 	readonly onDidChangeRepositories = this.didChangeRepositories.event;
-	private readonly disposables: vscode.Disposable[] = [this.didChange, this.didChangeRepositories];
+	private readonly didSelectInSourceControl = new vscode.EventEmitter<Repository>();
+	/** The user selected a repository in the Source Control view. */
+	readonly onDidSelectInSourceControl = this.didSelectInSourceControl.event;
+	private readonly disposables: vscode.Disposable[] = [this.didChange, this.didChangeRepositories, this.didSelectInSourceControl];
+
+	/** The repositories selected in the Source Control view when last looked at, and the last one reported. */
+	private selectedInSourceControl = new Set<Repository>();
+	private lastSelectedInSourceControl: Repository | undefined;
 
 	/** Settles when the built-in extension has finished its first scan of the workspace. */
 	readonly ready: Promise<void>;
@@ -91,34 +113,55 @@ export class RepositoryManager implements vscode.Disposable {
 	}
 
 	private add(apiRepository: ApiRepository): Promise<Repository | undefined> {
-		let pending = this.repositories.get(apiRepository);
+		const key = rootKey(apiRepository.rootUri);
+		let pending = this.repositories.get(key);
 		if (!pending) {
 			pending = (async () => {
 				const git = await GitRepository.open(() => this.gitApi.git.path, apiRepository.rootUri.fsPath,
 					message => this.log.warn(message));
-				if (!git || this.repositories.get(apiRepository) !== pending) {
+				if (!git || this.repositories.get(key) !== pending) {
 					return undefined;
 				}
 				const repository = new Repository(apiRepository, git);
 				repository.onDidChange(() => this.didChange.fire(repository));
+				repository.onDidChangeSelection(() => this.sourceControlSelectionChanged());
+				if (apiRepository.ui?.selected) {
+					this.selectedInSourceControl.add(repository);
+				}
 				this.opened.push(repository);
 				this.updateContext();
 				this.didChangeRepositories.fire();
 				return repository;
 			})();
-			this.repositories.set(apiRepository, pending);
+			this.repositories.set(key, pending);
 		}
 		return pending;
 	}
 
 	private remove(apiRepository: ApiRepository): void {
-		const index = this.opened.findIndex(repository => repository.api === apiRepository);
-		this.repositories.delete(apiRepository);
+		const key = rootKey(apiRepository.rootUri);
+		const index = this.opened.findIndex(repository => rootKey(repository.rootUri) === key);
+		this.repositories.delete(key);
 		if (index >= 0) {
 			const [repository] = this.opened.splice(index, 1);
 			repository.dispose();
 			this.updateContext();
 			this.didChangeRepositories.fire();
+		}
+	}
+
+	/**
+	 * Reports a repository the user picked in the Source Control view: the one that became
+	 * selected, or the only one left selected (single selection mode deselects the others).
+	 */
+	private sourceControlSelectionChanged(): void {
+		const now = new Set(this.opened.filter(repository => repository.api.ui?.selected));
+		const added = [...now].filter(repository => !this.selectedInSourceControl.has(repository));
+		this.selectedInSourceControl = now;
+		const picked = added.length === 1 ? added[0] : !added.length && now.size === 1 ? [...now][0] : undefined;
+		if (picked && picked !== this.lastSelectedInSourceControl) {
+			this.lastSelectedInSourceControl = picked;
+			this.didSelectInSourceControl.fire(picked);
 		}
 	}
 

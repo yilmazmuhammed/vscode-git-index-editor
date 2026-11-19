@@ -25,7 +25,8 @@ Etkinlik çubuğundaki **Git Staging** simgesi üç bölümlük bir görünüm a
 - Hem staged hem unstaged değişikliği olan dosya iki listede birden görünür ve *kısmen staged* olarak işaretlenir.
 - Başlık çubuğunda şu düğmeler vardır: tümünü ekle/çıkar, untracked dosyaları göster/gizle, filtre, yenile. `…` menüsünde sunum (liste, ağaç, kompakt ağaç) ve sıralama seçenekleri bulunur.
 - Filtre yolun bir parçasıyla eşleşir; `*` herhangi bir metne, `?` tek bir karaktere karşılık gelir. Başlıkta görünen/toplam sayısı yazar.
-- Birden fazla depo açıksa görünüm etkin editörün deposunu gösterir. Depo başlık çubuğundan da seçilebilir.
+- Birden fazla depo açıksa görünüm, etkin editör sekmesinin (diff'ler dahil her tür editör) ve Source Control görünümünde seçtiğiniz deponun ardından gider. İki liste ve commit alanı, üzerinde çalıştıkları depoyu ve dalı gösterir.
+- VS Code, Gezgin'de seçili dosya veya klasörü eklentilere bildirmez. Bu yüzden bir klasör ancak sağ tıklayıp **Git Staging'de Göster** dediğinizde dikkate alınır. Gezgin'de bir dosyaya tıklamak onu açtığı için görünüm onu izler. Depo başlık çubuğundan da seçilebilir.
 
 **Bağlam menüsü** (EGit'teki gibi): Index'e ekle/çıkar, çalışma ağacı sürümünü aç, HEAD ile
 karşılaştır, birbiriyle karşılaştır, Index'teki dosyayla değiştir, HEAD sürümüyle değiştir,
@@ -34,6 +35,34 @@ kopyala, Gezgin'de göster.
 
 - Assume-unchanged işaretini kaldırmak için Unstaged görünümünün `…` menüsünde **Assume Unchanged'i Kaldır…** komutu vardır.
 - Bu işaretli dosyalar Gezgin'de `AU` ile gösterilir.
+
+## Git Depoları görünümü
+
+Git Staging kabının ilk bölümü, EGit'teki Git Repositories görünümü gibi açık depoları listeler:
+
+| Düğüm | Gösterdiği | Eylemler |
+| --- | --- | --- |
+| **Depo** | Dal, ↑önde ↓geride ve MERGING / REBASING | Fetch, Şuradan Fetch…, Pull, Pull…, Upstream'e Push, Dalı Push Et…, Push…, Dala Geç…, Dal Oluştur…, Dalı Yapılandır…, Remote Oluştur…, Git Staging'de Göster, Yolu Kopyala |
+| **Dallar › Yerel** | Dallar, her `/` işaretinde klasörlere ayrılmış ya da liste hâlinde; upstream ve ↑↓ | Checkout, Dal Oluştur…, Yeniden Adlandır (F2), Sil (Del, birden çok), Dalı Yapılandır…, Dalı Push Et… |
+| **Dallar › Remote Tracking** | Remote-tracking dallar | Checkout (onu izleyen yerel dal olarak), Dal Oluştur…, Dalı Remote'ta Sil |
+| **Referanslar** | HEAD, FETCH_HEAD, ORIG_HEAD, MERGE_HEAD… | Checkout (detached), Dal Oluştur… |
+| **Remote'lar** | Her remote, Fetch ve Push URL'leri ve refspec'leriyle | Fetch, Push…, Remote'u Yapılandır…, Yeniden Adlandır, Sil |
+
+- **Birden çok depo seçildiğinde** Fetch, Pull ve Dala Geç hepsinde çalışır. Pull, aynı anda birkaç depoyu günceller (`indexEditor.repositories.pullConcurrency`).
+- **Dala Geç…** önce son checkout edilen dalları listeler; bunlar reflog'dan okunur.
+- **Dal Oluştur…** herhangi bir dal, tag ya da commit'ten başlar ve ad önerir. Remote bir dalı merge veya rebase ile izleyebilir.
+- **Dalı Yapılandır…** upstream remote'u, dalı ve pull modunu ayarlar ya da upstream'i kaldırır.
+- **Checkout'u yerel değişiklikler engellerse** şu seçenekler sunulur:
+  - **Akıllı Checkout**: staged ve unstaged değişikliklerinizi, untracked dosyalar dahil, diğer dala taşır. Önce sınar: o dalla çakışacaklarsa hiçbir şey değişmez ve değişiklikleriniz yerinde, bulunduğunuz dalda kalırsınız.
+  - **Önce Commit Et…**: işlemi durdurur ve commit alanını açar.
+  - **Değişiklikleri Atıp Checkout**: değişiklikleri atar.
+- **Fetch** hangi remote-tracking dalların güncellendiğini, eklendiğini ya da silindiğini bildirir.
+- **Pull…** bir remote'un dalını getirir, üzerine merge ya da rebase yapar ve onu upstream yapabilir. Git çakışmalarda durursa çakışmalar Staging görünümünde görünür.
+- **Dalı Push Et…** remote'u, uzak dal adını, upstream modunu ve force-with-lease push yapılıp yapılmayacağını sorar.
+- **Push…** refspec alır. `:refs/heads/eski` gibi bir refspec uzak dalı siler. **Dry Run** sonucu terminalde gösterir.
+- **Remote'u Yapılandır…** bir editör açar. Editörde URL, push URL'leri, fetch ve push refspec'leri, tag getirme ve prune ayarları ile Kaydet, Kaydet ve Fetch, Kaydet ve Push ve Dry Run düğmeleri bulunur.
+- Fetch, pull ve push yerleşik Git eklentisi üzerinden yapılır; kimlik bilgilerini VS Code her zamanki gibi sorar.
+- Başlık çubuğu dalları hiyerarşik ya da düz gösterir. `…` menüsü her dalın son commit'ini gösterir ve Editörle Bağla'yı açıp kapatır.
 
 ## Index'i düzenleme
 
@@ -110,7 +139,11 @@ Satır içi görünüm açıkken:
 | `indexEditor.staging.presentation` | `list` | Listeleme biçimi: `list`, `tree` veya `compactTree`. |
 | `indexEditor.staging.sortBy` | `name` | Sıralama: `name` (yola göre) veya `status` (değişiklik türüne göre). |
 | `indexEditor.staging.showUntracked` | `true` | Untracked dosyalar gösterilsin mi. |
-| `indexEditor.staging.followActiveEditor` | `true` | Görünüm etkin editörün deposunu izlesin mi. |
+| `indexEditor.staging.followActiveEditor` | `true` | Görünüm etkin editörün ve Source Control seçiminin deposunu izlesin mi. |
+| `indexEditor.repositories.hierarchicalBranches` | `true` | Dallar her `/` işaretinde klasörlere ayrılsın mı, yoksa liste mi olsun. |
+| `indexEditor.repositories.showLatestCommit` | `false` | Her dalın yanında son commit'i gösterilsin mi. |
+| `indexEditor.repositories.linkWithEditor` | `true` | Git Depoları görünümü etkin editörün deposunu seçsin mi. |
+| `indexEditor.repositories.pullConcurrency` | `3` | Pull'un aynı anda kaç depoyu güncelleyeceği. |
 | `indexEditor.commit.signOffByDefault` | `false` | Sign-off varsayılan olarak işaretli gelsin mi. |
 | `indexEditor.commit.problemCheck` | `off` | Commit öncesi sorun denetimi: `off`, `warn` veya `block`. |
 | `indexEditor.commit.problemSeverity` | `error` | Denetimde sayılacak en düşük düzey: `error` veya `warning`. |

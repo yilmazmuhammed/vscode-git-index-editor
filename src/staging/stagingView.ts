@@ -199,26 +199,41 @@ export class StagingController implements vscode.Disposable {
 			unstaged: this.createView('unstaged'),
 			staged: this.createView('staged')
 		};
+		// The view shows one repository. The last signal wins: the active editor moving to a file
+		// of another repository, a repository selected in the Source Control view, or one chosen
+		// with Select Repository or Show in Git Staging. VS Code does not tell extensions what is
+		// selected in the Explorer, so a folder there counts only through Show in Git Staging.
+		const followEditor = () => {
+			if (this.followsActiveEditor) {
+				this.follow(this.activeEditorRepository());
+			}
+		};
 		this.disposables.push(
 			vscode.window.registerFileDecorationProvider(new StagingDecorations()),
-			manager.onDidChangeRepositories(() => this.update()),
+			manager.onDidChangeRepositories(() => this.repositoriesChanged()),
 			manager.onDidChange(repository => {
 				if (repository === this.current) {
 					this.update();
 				}
 			}),
-			vscode.window.onDidChangeActiveTextEditor(() => {
+			manager.onDidSelectInSourceControl(repository => {
 				if (this.followsActiveEditor) {
-					this.update();
+					this.follow(repository);
 				}
 			}),
+			vscode.window.onDidChangeActiveTextEditor(followEditor),
+			vscode.window.tabGroups.onDidChangeTabs(followEditor),
+			vscode.window.tabGroups.onDidChangeTabGroups(followEditor),
 			vscode.workspace.onDidChangeConfiguration(event => {
+				if (event.affectsConfiguration('indexEditor.staging.followActiveEditor')) {
+					followEditor();
+				}
 				if (event.affectsConfiguration('indexEditor.staging')) {
 					this.update();
 				}
 			})
 		);
-		void manager.ready.then(() => this.update());
+		void manager.ready.then(() => this.repositoriesChanged());
 	}
 
 	private createView(list: ListKind): vscode.TreeView<Node> {
@@ -271,26 +286,51 @@ export class StagingController implements vscode.Disposable {
 		this.update();
 	}
 
+	/** Shows a repository, e.g. one picked with Select Repository or Show in Git Staging. */
 	selectRepository(repository: Repository): void {
+		this.follow(repository);
+	}
+
+	/** Switches to a repository, if it is a different one. */
+	private follow(repository: Repository | undefined): void {
+		if (!repository || repository === this.current || !this.manager.all.includes(repository)) {
+			return;
+		}
 		this.current = repository;
+		this.didChangeRepository.fire(repository);
 		this.update();
 	}
 
+	/** After repositories were opened or closed: keep the current one, or take the active editor's, or the first. */
+	private repositoriesChanged(): void {
+		const all = this.manager.all;
+		const fromEditor = this.followsActiveEditor ? this.activeEditorRepository() : undefined;
+		const next = fromEditor ?? (this.current && all.includes(this.current) ? this.current : all[0]);
+		if (next !== this.current) {
+			this.current = next;
+			this.didChangeRepository.fire(next);
+		}
+		this.update();
+	}
+
+	/** The file of the active editor tab, whatever kind of editor it is. */
+	private static activeResource(): vscode.Uri | undefined {
+		const input = vscode.window.tabGroups.activeTabGroup.activeTab?.input;
+		if (input instanceof vscode.TabInputText || input instanceof vscode.TabInputCustom || input instanceof vscode.TabInputNotebook) {
+			return input.uri;
+		}
+		if (input instanceof vscode.TabInputTextDiff || input instanceof vscode.TabInputNotebookDiff) {
+			return input.modified;
+		}
+		return vscode.window.activeTextEditor?.document.uri;
+	}
+
 	private activeEditorRepository(): Repository | undefined {
-		const uri = vscode.window.activeTextEditor?.document.uri;
-		if (!uri || ![ 'file', INDEX_SCHEME, GIT_SCHEME, EMPTY_SCHEME ].includes(uri.scheme)) {
+		const uri = StagingController.activeResource();
+		if (!uri || !['file', INDEX_SCHEME, GIT_SCHEME, EMPTY_SCHEME].includes(uri.scheme)) {
 			return undefined;
 		}
 		return this.manager.innermost(toFileUri(uri));
-	}
-
-	private chooseRepository(): Repository | undefined {
-		const all = this.manager.all;
-		const followed = this.followsActiveEditor ? this.activeEditorRepository() : undefined;
-		if (followed) {
-			return followed;
-		}
-		return this.current && all.includes(this.current) ? this.current : all[0];
 	}
 
 	/** The entries of a list of any repository, untracked files included whatever the view shows. */
@@ -320,13 +360,24 @@ export class StagingController implements vscode.Disposable {
 		return markPartial(unstaged, toEntries('staged', state.indexChanges, stagedKind));
 	}
 
-	/** Re-reads the lists of the repository the view should show. */
-	update(): void {
-		const repository = this.chooseRepository();
-		if (repository !== this.current) {
-			this.current = repository;
-			this.didChangeRepository.fire(repository);
+	/** Where the view's repository stands: its name and the checked-out branch, or the commit if HEAD is detached. */
+	describeRepository(): string | undefined {
+		const repository = this.current;
+		if (!repository) {
+			return undefined;
 		}
+		const head = repository.api.state.HEAD;
+		const at = head?.name ?? head?.commit?.slice(0, 8);
+		return at ? `${repository.name} • ${at}` : repository.name;
+	}
+
+	/** Re-reads the lists of the view's repository. */
+	update(): void {
+		if (this.current && !this.manager.all.includes(this.current)) {
+			this.repositoriesChanged();
+			return;
+		}
+		const repository = this.current;
 		this.lists = repository ? this.readState(repository) : { unstaged: [], staged: [] };
 		for (const list of ['unstaged', 'staged'] as const) {
 			const all = this.lists[list];
@@ -335,7 +386,7 @@ export class StagingController implements vscode.Disposable {
 			const view = this.views[list];
 			const title = list === 'unstaged' ? vscode.l10n.t('Unstaged Changes') : vscode.l10n.t('Staged Changes');
 			view.title = this.filterText ? `${title} (${visible.length}/${all.length})` : `${title} (${all.length})`;
-			view.description = this.manager.all.length > 1 ? repository?.name : undefined;
+			view.description = this.describeRepository();
 			view.message = !repository
 				? vscode.l10n.t('No Git repository is open.')
 				: this.filterText && all.length && !visible.length
