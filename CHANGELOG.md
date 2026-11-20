@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.4
+
+- Fixed: the arrow did not save a block whose lines also differ in leading or trailing whitespace. The
+  diff editor ignores that whitespace by default (`diffEditor.ignoreTrimWhitespace`), so its arrow
+  leaves it as it is; such a block now counts as moved, as the diff shows it.
+
 ## 0.3.3
 
 - The commit area keeps Author, Committer and the buttons in sight when the view gets shorter: the

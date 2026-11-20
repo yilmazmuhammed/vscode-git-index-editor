@@ -434,6 +434,32 @@ const tests: [string, (context: Context) => Promise<void>][] = [
 		assert.strictEqual(indexOf('arrow.txt'), 'a\nb\nedit c\nd\ne\nf\nG\n');
 	}],
 
+	['the arrow saves a block that changes part of a line, also when the line differs in indentation', async () => {
+		commitAll('half.txt', 'one two three\nkeep\n  four five\nend\n');
+		write('half.txt', 'one TWO three\nkeep\nfour FIVE\nend\n');
+		await openedDiff('indexEditor.openUnstagedDiff', 'half.txt');
+		const index = sideEditor('git-index')!;
+		const workingTree = sideEditor('file')!.document.uri;
+		type Range = { startLineNumber: number; startColumn: number; endLineNumber: number; endColumn: number };
+		const range = (line: number, from: number, to: number): Range =>
+			({ startLineNumber: line, startColumn: from, endLineNumber: line, endColumn: to });
+		const clickArrow = (originalRange: Range, modifiedRange: Range) => vscode.commands.executeCommand('diffEditor.revert', {
+			originalUri: workingTree,
+			modifiedUri: index.document.uri,
+			mapping: { innerChanges: [{ originalRange, modifiedRange }] },
+		});
+		await sleep(500);
+		// The arrow replaces only the characters that differ: "two" with "TWO".
+		await clickArrow(range(1, 5, 8), range(1, 5, 8));
+		await until('the changed word is in the Index', () => indexOf('half.txt') === 'one TWO three\nkeep\n  four five\nend\n');
+		await until('the Index document is saved', () => !index.document.isDirty);
+		// The diff editor ignores leading and trailing whitespace by default, so the arrow leaves the
+		// indentation as it is, and the diff shows no difference afterwards.
+		await clickArrow(range(3, 6, 10), range(3, 8, 12));
+		await until('the second word is in the Index', () => indexOf('half.txt') === 'one TWO three\nkeep\n  four FIVE\nend\n');
+		await until('the Index document is saved', () => !index.document.isDirty);
+	}],
+
 	['discardChange changes the working tree document without saving it', async () => {
 		commitAll('discard.txt', 'a\nb\n');
 		write('discard.txt', 'A\nb\n');

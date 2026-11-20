@@ -23,6 +23,15 @@ test('isBlockMove ignores line endings', () => {
 	assert.ok(isBlockMove('a\r\nB\r\nc\r\n', 'a\nb\nc\n', 'a\nB\nc\n'));
 });
 
+test('isBlockMove can ignore leading and trailing whitespace, as the diff editor does', () => {
+	const other = 'a\nfour FIVE\nc\n';
+	const before = 'a\n  four five\nc\n';
+	const after = 'a\n  four FIVE\nc\n';
+	assert.ok(!isBlockMove(other, before, after), 'the indentation still differs');
+	assert.ok(isBlockMove(other, before, after, true));
+	assert.ok(!isBlockMove(other, before, 'a\n    four five\nc\n', true), 'changing only the indentation takes no block');
+});
+
 test('isBlockMove leaves other edits alone', () => {
 	const other = 'a\nb\nc\nd\n';
 	const index = 'a\nx\nc\ny\n';

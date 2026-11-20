@@ -1,7 +1,5 @@
 import { diffLines, Hunk } from './lineDiff';
 
-const lines = (text: string) => text.replace(/\r\n/g, '\n').split('\n');
-
 /**
  * Whether an edit of the Index document took whole blocks over from the other side of its diff, as the
  * diff editor's arrow does: some of the blocks that differed between the two sides are gone, and every
@@ -11,8 +9,16 @@ const lines = (text: string) => text.replace(/\r\n/g, '\n').split('\n');
  *
  * With a selection, the arrow takes only the selected part of a block. The block changes but stays, so
  * that edit is not recognized and waits for a save like any edit.
+ *
+ * @param ignoreTrimWhitespace Whether lines that differ only in leading and trailing whitespace count
+ * as equal, as in the diff editor with `diffEditor.ignoreTrimWhitespace`. Its arrow then leaves that
+ * whitespace as it is.
  */
-export function isBlockMove(other: string, before: string, after: string): boolean {
+export function isBlockMove(other: string, before: string, after: string, ignoreTrimWhitespace = false): boolean {
+	const lines = (text: string) => {
+		const split = text.replace(/\r\n/g, '\n').split('\n');
+		return ignoreTrimWhitespace ? split.map(line => line.trim()) : split;
+	};
 	const source = lines(other);
 	const was = lines(before);
 	const now = lines(after);

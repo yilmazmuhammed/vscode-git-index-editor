@@ -82,6 +82,7 @@ Index her zaman sağdadır. Bu yüzden kenardaki ok her zaman "bu bloğu Index'e
   - Index tarafında zaten kaydedilmemiş düzenlemeler varsa blok onlara katılır ve hepsi kaydettiğinizde yazılır.
   - Seçim varken ok yalnızca seçili karakterleri taşır; bu düzenleme de <kbd>Ctrl</kbd>+<kbd>S</kbd> bekler.
   - Bir düzenleme, blokları bütünüyle diğer tarafla aynı yapıp gerisine dokunmuyorsa böyle kaydedilir. Aynı sonucu veren, elle yazılmış tek bir düzenleme de öyle.
+  - Satır başındaki ve sonundaki boşluklar yalnızca diff bunları gösteriyorsa hesaba katılır (`diffEditor.ignoreTrimWhitespace`). Varsayılan olarak göstermez; ok da satırın girintisini olduğu gibi bırakır.
 - Index tarafına elle istediğiniz metni yazabilirsiniz. <kbd>Ctrl</kbd>+<kbd>S</kbd> bu metni doğrudan Index'e yazar; çalışma ağacındaki dosya değişmez.
 
 Diğer komutlar:

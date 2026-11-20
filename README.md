@@ -83,6 +83,7 @@ into the Index":
   - If the Index side already has unsaved edits, the block joins them and everything is written when you save.
   - With a selection, the arrow moves only the selected characters; that edit waits for <kbd>Ctrl</kbd>+<kbd>S</kbd> too.
   - An edit is saved this way when it makes whole blocks equal to the other side and leaves the rest alone. So is a single edit you type that does the same.
+  - Leading and trailing whitespace counts only if the diff shows it (`diffEditor.ignoreTrimWhitespace`). By default it does not, and the arrow leaves a line's indentation as it is.
 - Type anything you like into the Index side. <kbd>Ctrl</kbd>+<kbd>S</kbd> writes it to the Index; the working tree file does not change.
 
 More commands:

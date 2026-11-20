@@ -58,7 +58,8 @@ export function saveBlockMoves(log: (error: unknown) => void): vscode.Disposable
 			return savedByUs.has(key);
 		}
 		const other = vscode.workspace.textDocuments.find(doc => doc.uri.toString() === diff.other.toString());
-		return !!other && isBlockMove(other.getText(), before, document.getText());
+		const ignoreTrimWhitespace = vscode.workspace.getConfiguration('diffEditor', document).get<boolean>('ignoreTrimWhitespace', true);
+		return !!other && isBlockMove(other.getText(), before, document.getText(), ignoreTrimWhitespace);
 	};
 
 	const onChange = (event: vscode.TextDocumentChangeEvent) => {
