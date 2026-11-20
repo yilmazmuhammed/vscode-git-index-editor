@@ -78,6 +78,10 @@ into the Index":
 
 - In the unstaged diff the arrow **stages** a block.
 - In the staged diff the arrow takes a block back from the base, which **unstages** it when the base is HEAD.
+- **The arrow saves at once.**
+  - The block goes to the Index without <kbd>Ctrl</kbd>+<kbd>S</kbd>, and so does undoing it.
+  - If the Index side already has unsaved edits, the block joins them and everything is written when you save.
+  - With a selection, the arrow moves only the selected characters; that edit waits for <kbd>Ctrl</kbd>+<kbd>S</kbd> too.
 - Type anything you like into the Index side. <kbd>Ctrl</kbd>+<kbd>S</kbd> writes it to the Index; the working tree file does not change.
 
 More commands:
@@ -87,6 +91,12 @@ More commands:
 - **Switch Base Between HEAD and Upstream** (the branch icon in the title) changes the base of the staged diff. The setting `indexEditor.staging.stagedCompareBase` sets the default. Without an upstream, HEAD is used.
 - **Stage Whole File**, **Reset Index to Base** and **Reload Index** are in the `…` menu of the editor title.
 - <kbd>Ctrl</kbd>+<kbd>K</kbd> <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>D</kbd> switches between the two diffs of a file.
+- **Markdown files get a preview button for each side:**
+  - The left button previews the working tree file in the unstaged diff, and the base in the staged diff.
+  - The right button previews the Index.
+  - A preview is locked: it keeps showing its side when the cursor moves to the other side.
+  - When both previews are open, they are stacked so both stay visible.
+  - VS Code's own **Open Preview** button would always preview the Index here, so these diffs hide it.
 
 The same editors open from VS Code's own Source Control view: right-click a file and choose
 **Edit Index: …**. The Explorer and the title menu of an open file have these commands too.
@@ -153,7 +163,7 @@ While the inline view is on:
 
 ## Good to know
 
-- **Save actions run on Ctrl+S.** `files.trimTrailingWhitespace`, `editor.formatOnSave` and similar settings apply when you save an Index document. The stage and unstage commands write directly and are not affected.
+- **Save actions run when an Index document is saved**, by <kbd>Ctrl</kbd>+<kbd>S</kbd> or by the arrow. `files.trimTrailingWhitespace`, `editor.formatOnSave` and similar settings apply then. The stage and unstage commands write directly and are not affected.
 - **With `files.autoSave` on**, an Index document is written to the Index on every automatic save.
 - **Line endings.** The content of a file already in the Index is stored byte for byte, so with `core.autocrlf` the Index keeps its LF. A file new to the Index goes through Git's clean filters.
 - **Conflicted files** open in the merge editor. Their Index cannot be edited: resolve the conflict and add the file to the Index.
@@ -175,7 +185,8 @@ npx @vscode/vsce package
 ```
 
 With `VSCODE_EXECUTABLE` set, the integration tests use the installed VS Code instead of downloading
-one, which an offline network needs.
+one, which an offline network needs. `INDEX_EDITOR_TEST` set to part of a test name runs only the
+tests whose name contains it.
 
 ## Publishing
 

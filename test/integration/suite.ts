@@ -330,6 +330,40 @@ const tests: [string, (context: Context) => Promise<void>][] = [
 		assert.strictEqual(indexOf('unstage.txt'), 'one\n2\n3\n4\n5\n6\nseven\n');
 	}],
 
+	['each side of a Markdown diff has its own preview, and both stay visible', async () => {
+		commitAll('notes.md', '# HEAD\n');
+		write('notes.md', '# Index\n');
+		git('add', 'notes.md');
+		write('notes.md', '# Working tree\n');
+		const isPreview = (tab: vscode.Tab) => tab.input instanceof vscode.TabInputWebview && tab.input.viewType.endsWith('markdown.preview');
+		const previewGroups = () => vscode.window.tabGroups.all.filter(group => group.tabs.some(isPreview));
+		const previewCount = () => vscode.window.tabGroups.all.flatMap(group => group.tabs).filter(isPreview).length;
+
+		await openedDiff('indexEditor.openUnstagedDiff', 'notes.md');
+		const index = activeDiffInput()!.modified;
+		await vscode.commands.executeCommand('indexEditor.previewWorkingTree', index);
+		await until('the working tree preview opens', () => previewCount() === 1);
+		assert.ok(activeDiffInput(), 'the diff keeps the focus');
+		await vscode.commands.executeCommand('indexEditor.previewIndex', index);
+		await until('the Index preview opens', () => previewCount() === 2);
+		assert.strictEqual(previewGroups().length, 2, 'the two previews are in separate groups, so both are visible');
+		assert.ok(activeDiffInput(), 'the diff keeps the focus');
+
+		// The base of a file new to the Index has nothing to preview.
+		await vscode.commands.executeCommand('workbench.action.closeAllGroups');
+		write('brand-new.md', '# New\n');
+		git('add', 'brand-new.md');
+		await openedDiff('indexEditor.openStagedDiff', 'brand-new.md');
+		await vscode.commands.executeCommand('indexEditor.previewBase');
+		await sleep(500);
+		assert.strictEqual(previewCount(), 0);
+		git('rm', '-q', '-f', '--cached', 'brand-new.md');
+		fs.unlinkSync(path.join(root, 'brand-new.md'));
+		git('add', 'notes.md');
+		git('commit', '-q', '-m', 'notes');
+		await vscode.commands.executeCommand('workbench.action.closeAllGroups');
+	}],
+
 	['stageChange joins unsaved Index edits instead of overwriting them', async () => {
 		commitAll('dirty.txt', 'a\nb\nc\nd\ne\nf\n');
 		write('dirty.txt', 'a\nb\nc\nd\ne\nF\n');
@@ -346,6 +380,40 @@ const tests: [string, (context: Context) => Promise<void>][] = [
 		assert.strictEqual(indexOf('dirty.txt'), 'a\nb\nc\nd\ne\nf\n', 'nothing is written until the user saves');
 		await index.save();
 		assert.strictEqual(indexOf('dirty.txt'), 'edit a\nb\nc\nd\ne\nF\n');
+	}],
+
+	['a block moved into the Index by the diff editor is saved at once, and so is undoing it', async () => {
+		commitAll('arrow.txt', 'a\nb\nc\nd\ne\nf\ng\n');
+		write('arrow.txt', 'A\nb\nc\nd\ne\nf\nG\n');
+		await openedDiff('indexEditor.openUnstagedDiff', 'arrow.txt');
+		const index = sideEditor('git-index')!;
+		// Revert from the Command Palette makes the same whole-line edit as the arrow in the gutter.
+		const moveBlockAt = async (line: number) => {
+			await vscode.commands.executeCommand('workbench.action.compareEditor.focusPrimarySide');
+			select(index, line);
+			await sleep(300);
+			await vscode.commands.executeCommand('diffEditor.revert');
+		};
+		await sleep(500);
+		await moveBlockAt(6);
+		await until('the block is in the Index', () => indexOf('arrow.txt') === 'a\nb\nc\nd\ne\nf\nG\n');
+		await until('the Index document is saved', () => !index.document.isDirty);
+		assert.strictEqual(read('arrow.txt'), 'A\nb\nc\nd\ne\nf\nG\n');
+
+		await vscode.commands.executeCommand('undo');
+		await until('undo takes the block out of the Index', () => indexOf('arrow.txt') === 'a\nb\nc\nd\ne\nf\ng\n');
+		await until('the Index document is saved', () => !index.document.isDirty);
+
+		// With unsaved edits of its own, the document keeps the moved block until it is saved.
+		select(index, 2);
+		await typeInto('workbench.action.compareEditor.focusPrimarySide', 'edit ');
+		await moveBlockAt(6);
+		await until('the block is in the document', () => index.document.getText().endsWith('G\n'));
+		await sleep(300);
+		assert.ok(index.document.isDirty);
+		assert.strictEqual(indexOf('arrow.txt'), 'a\nb\nc\nd\ne\nf\ng\n', 'nothing is written until the user saves');
+		await index.document.save();
+		assert.strictEqual(indexOf('arrow.txt'), 'a\nb\nedit c\nd\ne\nf\nG\n');
 	}],
 
 	['discardChange changes the working tree document without saving it', async () => {
@@ -925,8 +993,11 @@ export async function run(): Promise<void> {
 	await until('the repository is found', () => extension.manager.all.length > 0, 20000);
 	const context: Context = { extension, repository: extension.manager.all[0] };
 
+	// INDEX_EDITOR_TEST=<part of a name> runs only the tests whose name contains it.
+	const only = process.env.INDEX_EDITOR_TEST;
+	const selected = only ? tests.filter(([name]) => name.includes(only)) : tests;
 	const failures: string[] = [];
-	for (const [name, body] of tests) {
+	for (const [name, body] of selected) {
 		try {
 			await body(context);
 			console.log(`  ok  ${name}`);
@@ -937,7 +1008,7 @@ export async function run(): Promise<void> {
 		await vscode.commands.executeCommand('workbench.action.revertAndCloseActiveEditor');
 		await vscode.commands.executeCommand('workbench.action.closeAllEditors');
 	}
-	console.log(`${tests.length - failures.length}/${tests.length} passed`);
+	console.log(`${selected.length - failures.length}/${selected.length} passed`);
 	if (failures.length) {
 		throw new Error(`${failures.length} test(s) failed`);
 	}

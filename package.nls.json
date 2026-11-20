@@ -18,6 +18,9 @@
 	"command.stageWholeFile": "Stage Whole File",
 	"command.resetIndexToBase": "Reset Index to Base",
 	"command.reloadIndex": "Reload Index",
+	"command.previewWorkingTree": "Open Preview of the Working Tree File (Left)",
+	"command.previewBase": "Open Preview of the Base (Left)",
+	"command.previewIndex": "Open Preview of the Index (Right)",
 
 	"command.staging.open": "Open",
 	"command.staging.stage": "Add to Index",

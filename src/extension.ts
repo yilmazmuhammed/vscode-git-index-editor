@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { trackActiveDiff } from './activeDiff';
+import { saveBlockMoves } from './blockSave';
 import { AssumeUnchangedDecorations } from './assumeUnchangedDecorations';
 import { onDidChangeDiffMode } from './diffMode';
 import { EmptyFileSystem, IndexFileSystem } from './indexFileSystem';
@@ -94,6 +95,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<Extens
 		}),
 		onDidChangeDiffMode(() => indexFileSystem.reloadOpenDocuments()),
 		trackActiveDiff(),
+		saveBlockMoves(error => log.error(error instanceof Error ? error : String(error))),
 		editors.register(register),
 		registerStagingCommands(register, api, manager, staging, editors),
 		// With a request (tests, other extensions) commits it; from a key or the palette, commits

@@ -77,6 +77,10 @@ Index her zaman sağdadır. Bu yüzden kenardaki ok her zaman "bu bloğu Index'e
 
 - Unstaged karşılaştırmada ok bloğu **stage eder**.
 - Staged karşılaştırmada ok bloğu tabandan geri alır; taban HEAD ise bloğu **unstage eder**.
+- **Ok hemen kaydeder.**
+  - Blok <kbd>Ctrl</kbd>+<kbd>S</kbd> gerekmeden Index'e yazılır; geri almak (undo) da öyle.
+  - Index tarafında zaten kaydedilmemiş düzenlemeler varsa blok onlara katılır ve hepsi kaydettiğinizde yazılır.
+  - Seçim varken ok yalnızca seçili karakterleri taşır; bu düzenleme de <kbd>Ctrl</kbd>+<kbd>S</kbd> bekler.
 - Index tarafına elle istediğiniz metni yazabilirsiniz. <kbd>Ctrl</kbd>+<kbd>S</kbd> bu metni doğrudan Index'e yazar; çalışma ağacındaki dosya değişmez.
 
 Diğer komutlar:
@@ -86,6 +90,12 @@ Diğer komutlar:
 - **Tabanı HEAD ile Upstream Arasında Değiştir** (başlıktaki dal simgesi): staged karşılaştırmanın tabanını değiştirir. Varsayılanı `indexEditor.staging.stagedCompareBase` ayarı belirler. Upstream yoksa HEAD kullanılır.
 - **Tüm Dosyayı Stage Et**, **Index'i Tabana Döndür** ve **Index'i Yeniden Yükle**: editör başlığının `…` menüsündedir.
 - <kbd>Ctrl</kbd>+<kbd>K</kbd> <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>D</kbd> iki karşılaştırma arasında geçiş yapar.
+- **Markdown dosyalarında her tarafın kendi önizleme düğmesi vardır:**
+  - Soldaki düğme, unstaged karşılaştırmada çalışma ağacındaki dosyayı, staged karşılaştırmada tabanı önizler.
+  - Sağdaki düğme Index'i önizler.
+  - Önizleme kilitlidir: imleç diğer tarafa geçince de kendi tarafını göstermeye devam eder.
+  - İki önizleme birlikte açıksa, ikisi de görünsün diye alt alta yerleşir.
+  - VS Code'un kendi **Önizlemeyi Aç** düğmesi bu karşılaştırmalarda her zaman Index'i göstereceği için gizlenir.
 
 Aynı editörlere VS Code'un kendi Source Control listesinden de ulaşabilirsiniz. Dosyaya sağ tıklayıp
 **Index'i Düzenle: …** komutunu seçin. Gezgin'de ve açık bir dosyanın başlık menüsünde de aynı komutlar vardır.
@@ -152,7 +162,7 @@ Satır içi görünüm açıkken:
 
 ## Bilinmesi gerekenler
 
-- **Kaydetme eylemleri Ctrl+S'te çalışır.** Bir Index belgesini kaydederken `files.trimTrailingWhitespace` ve `editor.formatOnSave` gibi ayarlar uygulanır. Stage ve unstage komutları Index'e doğrudan yazar; bu ayarlardan etkilenmez.
+- **Kaydetme eylemleri Index belgesi kaydedilirken çalışır**, ister <kbd>Ctrl</kbd>+<kbd>S</kbd> ile ister okla. Bu sırada `files.trimTrailingWhitespace` ve `editor.formatOnSave` gibi ayarlar uygulanır. Stage ve unstage komutları Index'e doğrudan yazar; bu ayarlardan etkilenmez.
 - **`files.autoSave` açıksa** Index belgesi her otomatik kayıtta Index'e yazılır.
 - **Satır sonları.** Index'te zaten olan bir dosyanın içeriği bayt bayt saklanır; `core.autocrlf` açıkken bile Index'te LF kalır. Index'e ilk kez giren dosya Git'in clean filtrelerinden geçer.
 - **Çakışmalı dosyalar** merge editöründe açılır. Böyle bir dosyanın Index'i düzenlenemez. Çakışmayı çözüp dosyayı Index'e ekleyin.
@@ -174,7 +184,8 @@ npx @vscode/vsce package
 ```
 
 `VSCODE_EXECUTABLE` verilirse entegrasyon testleri kurulu VS Code ile çalışır ve indirme yapmaz. Bu
-kapalı ağda gereklidir.
+kapalı ağda gereklidir. `INDEX_EDITOR_TEST` bir test adının bir parçasına ayarlanırsa yalnızca adında
+o metin geçen testler çalışır.
 
 ## Yayımlama
 

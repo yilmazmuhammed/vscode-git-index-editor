@@ -18,6 +18,9 @@
 	"command.stageWholeFile": "Tüm Dosyayı Stage Et",
 	"command.resetIndexToBase": "Index'i Tabana Döndür",
 	"command.reloadIndex": "Index'i Yeniden Yükle",
+	"command.previewWorkingTree": "Çalışma Ağacındaki Dosyanın Önizlemesini Aç (Sol)",
+	"command.previewBase": "Tabanın Önizlemesini Aç (Sol)",
+	"command.previewIndex": "Index'in Önizlemesini Aç (Sağ)",
 
 	"command.staging.open": "Aç",
 	"command.staging.stage": "Index'e Ekle",

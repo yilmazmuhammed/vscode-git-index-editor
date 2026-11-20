@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.3.1
+
+- **Markdown preview in the Index diffs**: a preview button for each side, the working tree file (or
+  the base) on the left and the Index on the right. The previews are locked, and when both are open
+  they are stacked so both stay visible. VS Code's own Open Preview button, which always previewed the
+  Index, is hidden in these diffs.
+- **The arrow in the diff gutter saves at once**: a block it moves into the Index is written without
+  Ctrl+S, and so is undoing it. When the Index side already has unsaved edits, the block joins them
+  and waits for the save.
+
 ## 0.3.0
 
 - **Git Repositories view**, as in EGit: each repository with its branch, ahead/behind and merge or

@@ -231,5 +231,6 @@
 	"Smart Checkout needs Git 2.40 or later: {0}": "Akıllı Checkout için Git 2.40 veya üstü gerekir: {0}",
 	"Smart Checkout takes your changes, staged and unstaged, over to {0}. If they would conflict with {0}, nothing changes and you stay on the current branch.": "Akıllı Checkout, staged ve unstaged değişikliklerinizi {0} dalına taşır. {0} ile çakışacaklarsa hiçbir şey değişmez ve bulunduğunuz dalda kalırsınız.",
 	"Smart Checkout is not possible while there are unresolved conflicts.": "Çözülmemiş çakışmalar varken Akıllı Checkout yapılamaz.",
-	"Smart Checkout of {0} failed, and going back failed too. Your changes are saved in {1} (commit {2}).": "{0} dalına Akıllı Checkout başarısız oldu ve geri dönüş de başarısız oldu. Değişiklikleriniz {1} altında saklandı (commit {2})."
+	"Smart Checkout of {0} failed, and going back failed too. Your changes are saved in {1} (commit {2}).": "{0} dalına Akıllı Checkout başarısız oldu ve geri dönüş de başarısız oldu. Değişiklikleriniz {1} altında saklandı (commit {2}).",
+	"This side of the diff has no file to preview.": "Diff'in bu tarafında önizlenecek bir dosya yok."
 }

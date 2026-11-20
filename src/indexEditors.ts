@@ -4,6 +4,7 @@ import { activeDiff, ActiveDiff } from './activeDiff';
 import { ensureSideBySide } from './diffMode';
 import { IndexFileSystem } from './indexFileSystem';
 import { LineSelection, takeSelection } from './lineDiff';
+import { previewSide } from './markdownPreview';
 import { Repository, RepositoryManager } from './repository';
 import type { API } from './typings/git';
 import { INDEX_SCHEME, isEmptyUri, toEmptyUri, toFileUri, toIndexUri } from './uris';
@@ -243,6 +244,7 @@ export class IndexEditors implements vscode.Disposable {
 				await open(file);
 			}
 		};
+		const preview = (side: 'left' | 'index') => (...args: unknown[]) => previewSide(side, args);
 		const moveChangeToIndex = async () => {
 			const diff = activeDiff();
 			if (diff) {
@@ -269,7 +271,10 @@ export class IndexEditors implements vscode.Disposable {
 			}),
 			run('indexEditor.stageWholeFile', () => this.stageWholeFile()),
 			run('indexEditor.resetIndexToBase', () => this.resetIndexToBase()),
-			run('indexEditor.reloadIndex', () => this.reloadIndex())
+			run('indexEditor.reloadIndex', () => this.reloadIndex()),
+			run('indexEditor.previewWorkingTree', preview('left')),
+			run('indexEditor.previewBase', preview('left')),
+			run('indexEditor.previewIndex', preview('index'))
 		);
 	}
 

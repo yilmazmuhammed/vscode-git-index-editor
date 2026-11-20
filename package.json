@@ -2,7 +2,7 @@
   "name": "git-index-editor",
   "displayName": "%displayName%",
   "description": "%description%",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "publisher": "myilmaz",
   "license": "MIT",
   "icon": "images/icon.png",
@@ -157,6 +157,24 @@
         "title": "%command.reloadIndex%",
         "category": "Git Index",
         "icon": "$(refresh)"
+      },
+      {
+        "command": "indexEditor.previewWorkingTree",
+        "title": "%command.previewWorkingTree%",
+        "category": "Git Index",
+        "icon": "$(open-preview)"
+      },
+      {
+        "command": "indexEditor.previewBase",
+        "title": "%command.previewBase%",
+        "category": "Git Index",
+        "icon": "$(open-preview)"
+      },
+      {
+        "command": "indexEditor.previewIndex",
+        "title": "%command.previewIndex%",
+        "category": "Git Index",
+        "icon": "$(preview)"
       },
       {
         "command": "indexEditor.staging.open",
@@ -563,6 +581,18 @@
         {
           "command": "indexEditor.reloadIndex",
           "when": "indexEditor.activeDiff"
+        },
+        {
+          "command": "indexEditor.previewWorkingTree",
+          "when": "indexEditor.activeDiff == unstaged && resourceLangId =~ /^(markdown|prompt|instructions|chatagent|skill)$/"
+        },
+        {
+          "command": "indexEditor.previewBase",
+          "when": "indexEditor.activeDiff == staged && resourceLangId =~ /^(markdown|prompt|instructions|chatagent|skill)$/"
+        },
+        {
+          "command": "indexEditor.previewIndex",
+          "when": "indexEditor.activeDiff && resourceLangId =~ /^(markdown|prompt|instructions|chatagent|skill)$/"
         },
         {
           "command": "indexEditor.stageAll",
@@ -1292,24 +1322,39 @@
       ],
       "editor/title": [
         {
+          "command": "indexEditor.previewWorkingTree",
+          "when": "indexEditor.activeDiff == unstaged && !diffEditorInlineMode && resourceLangId =~ /^(markdown|prompt|instructions|chatagent|skill)$/",
+          "group": "navigation@1"
+        },
+        {
+          "command": "indexEditor.previewBase",
+          "when": "indexEditor.activeDiff == staged && !diffEditorInlineMode && resourceLangId =~ /^(markdown|prompt|instructions|chatagent|skill)$/",
+          "group": "navigation@1"
+        },
+        {
+          "command": "indexEditor.previewIndex",
+          "when": "indexEditor.activeDiff && !diffEditorInlineMode && resourceLangId =~ /^(markdown|prompt|instructions|chatagent|skill)$/",
+          "group": "navigation@2"
+        },
+        {
           "command": "indexEditor.stageChange",
           "when": "indexEditor.activeDiff == unstaged && !diffEditorInlineMode",
-          "group": "navigation@1"
+          "group": "navigation@3"
         },
         {
           "command": "indexEditor.unstageChange",
           "when": "indexEditor.activeDiff == staged && !diffEditorInlineMode",
-          "group": "navigation@1"
+          "group": "navigation@3"
         },
         {
           "command": "indexEditor.toggleStagedBase",
           "when": "indexEditor.activeDiff == staged && !diffEditorInlineMode",
-          "group": "navigation@2"
+          "group": "navigation@4"
         },
         {
           "command": "indexEditor.switchDiff",
           "when": "indexEditor.activeDiff && !diffEditorInlineMode",
-          "group": "navigation@3"
+          "group": "navigation@5"
         },
         {
           "command": "indexEditor.stageWholeFile",
