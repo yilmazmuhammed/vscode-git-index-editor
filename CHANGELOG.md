@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.3.2
+
+- Fixed: clicking the arrow in the diff gutter left the block unsaved. The arrow edits only the
+  characters that differ, and 0.3.1 recognized only edits of whole lines. An edit now counts as a moved
+  block when it makes whole blocks equal to the other side and leaves the rest alone, whatever its shape.
+- The Markdown preview buttons have icons of their own: a split window with the previewed side shaded
+  and a magnifier on it. Before, they used VS Code icons that did not tell which side they preview.
+
 ## 0.3.1
 
 - **Markdown preview in the Index diffs**: a preview button for each side, the working tree file (or

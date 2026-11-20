@@ -81,6 +81,7 @@ Index her zaman sağdadır. Bu yüzden kenardaki ok her zaman "bu bloğu Index'e
   - Blok <kbd>Ctrl</kbd>+<kbd>S</kbd> gerekmeden Index'e yazılır; geri almak (undo) da öyle.
   - Index tarafında zaten kaydedilmemiş düzenlemeler varsa blok onlara katılır ve hepsi kaydettiğinizde yazılır.
   - Seçim varken ok yalnızca seçili karakterleri taşır; bu düzenleme de <kbd>Ctrl</kbd>+<kbd>S</kbd> bekler.
+  - Bir düzenleme, blokları bütünüyle diğer tarafla aynı yapıp gerisine dokunmuyorsa böyle kaydedilir. Aynı sonucu veren, elle yazılmış tek bir düzenleme de öyle.
 - Index tarafına elle istediğiniz metni yazabilirsiniz. <kbd>Ctrl</kbd>+<kbd>S</kbd> bu metni doğrudan Index'e yazar; çalışma ağacındaki dosya değişmez.
 
 Diğer komutlar:
@@ -93,6 +94,7 @@ Diğer komutlar:
 - **Markdown dosyalarında her tarafın kendi önizleme düğmesi vardır:**
   - Soldaki düğme, unstaged karşılaştırmada çalışma ağacındaki dosyayı, staged karşılaştırmada tabanı önizler.
   - Sağdaki düğme Index'i önizler.
+  - Her simge bölünmüş bir penceredir; önizlenen taraf gölgelidir ve üzerinde bir büyüteç vardır.
   - Önizleme kilitlidir: imleç diğer tarafa geçince de kendi tarafını göstermeye devam eder.
   - İki önizleme birlikte açıksa, ikisi de görünsün diye alt alta yerleşir.
   - VS Code'un kendi **Önizlemeyi Aç** düğmesi bu karşılaştırmalarda her zaman Index'i göstereceği için gizlenir.

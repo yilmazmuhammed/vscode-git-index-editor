@@ -387,7 +387,18 @@ const tests: [string, (context: Context) => Promise<void>][] = [
 		write('arrow.txt', 'A\nb\nc\nd\ne\nf\nG\n');
 		await openedDiff('indexEditor.openUnstagedDiff', 'arrow.txt');
 		const index = sideEditor('git-index')!;
-		// Revert from the Command Palette makes the same whole-line edit as the arrow in the gutter.
+		const workingTree = sideEditor('file')!.document.uri;
+		// The arrow in the gutter runs diffEditor.revert with the block, and edits only the characters that
+		// differ: here the "g" of line 7.
+		const clickArrowAt = async (line: number) => {
+			const range = { startLineNumber: line + 1, startColumn: 1, endLineNumber: line + 1, endColumn: 2 };
+			await vscode.commands.executeCommand('diffEditor.revert', {
+				originalUri: workingTree,
+				modifiedUri: index.document.uri,
+				mapping: { innerChanges: [{ originalRange: range, modifiedRange: range }] },
+			});
+		};
+		// Revert from the Command Palette replaces the whole lines of the blocks at the cursor.
 		const moveBlockAt = async (line: number) => {
 			await vscode.commands.executeCommand('workbench.action.compareEditor.focusPrimarySide');
 			select(index, line);
@@ -395,11 +406,18 @@ const tests: [string, (context: Context) => Promise<void>][] = [
 			await vscode.commands.executeCommand('diffEditor.revert');
 		};
 		await sleep(500);
-		await moveBlockAt(6);
-		await until('the block is in the Index', () => indexOf('arrow.txt') === 'a\nb\nc\nd\ne\nf\nG\n');
+		await clickArrowAt(6);
+		await until('the arrow puts the block in the Index', () => indexOf('arrow.txt') === 'a\nb\nc\nd\ne\nf\nG\n');
 		await until('the Index document is saved', () => !index.document.isDirty);
 		assert.strictEqual(read('arrow.txt'), 'A\nb\nc\nd\ne\nf\nG\n');
 
+		await vscode.commands.executeCommand('undo');
+		await until('undo takes the block out of the Index', () => indexOf('arrow.txt') === 'a\nb\nc\nd\ne\nf\ng\n');
+		await until('the Index document is saved', () => !index.document.isDirty);
+
+		await moveBlockAt(6);
+		await until('Revert puts the block in the Index', () => indexOf('arrow.txt') === 'a\nb\nc\nd\ne\nf\nG\n');
+		await until('the Index document is saved', () => !index.document.isDirty);
 		await vscode.commands.executeCommand('undo');
 		await until('undo takes the block out of the Index', () => indexOf('arrow.txt') === 'a\nb\nc\nd\ne\nf\ng\n');
 		await until('the Index document is saved', () => !index.document.isDirty);

@@ -58,8 +58,7 @@ export function saveBlockMoves(log: (error: unknown) => void): vscode.Disposable
 			return savedByUs.has(key);
 		}
 		const other = vscode.workspace.textDocuments.find(doc => doc.uri.toString() === diff.other.toString());
-		const changes = event.contentChanges.map(change => ({ offset: change.rangeOffset, length: change.rangeLength, text: change.text }));
-		return !!other && isBlockMove(changes, other.getText(), before, document.getText());
+		return !!other && isBlockMove(other.getText(), before, document.getText());
 	};
 
 	const onChange = (event: vscode.TextDocumentChangeEvent) => {

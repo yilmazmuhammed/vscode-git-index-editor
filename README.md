@@ -82,6 +82,7 @@ into the Index":
   - The block goes to the Index without <kbd>Ctrl</kbd>+<kbd>S</kbd>, and so does undoing it.
   - If the Index side already has unsaved edits, the block joins them and everything is written when you save.
   - With a selection, the arrow moves only the selected characters; that edit waits for <kbd>Ctrl</kbd>+<kbd>S</kbd> too.
+  - An edit is saved this way when it makes whole blocks equal to the other side and leaves the rest alone. So is a single edit you type that does the same.
 - Type anything you like into the Index side. <kbd>Ctrl</kbd>+<kbd>S</kbd> writes it to the Index; the working tree file does not change.
 
 More commands:
@@ -94,6 +95,7 @@ More commands:
 - **Markdown files get a preview button for each side:**
   - The left button previews the working tree file in the unstaged diff, and the base in the staged diff.
   - The right button previews the Index.
+  - Each icon is a split window with the previewed side shaded and a magnifier on it.
   - A preview is locked: it keeps showing its side when the cursor moves to the other side.
   - When both previews are open, they are stacked so both stay visible.
   - VS Code's own **Open Preview** button would always preview the Index here, so these diffs hide it.
