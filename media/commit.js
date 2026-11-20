@@ -44,26 +44,45 @@
 	const commit = el('button', { type: 'button' }, [t.commit]);
 	const noRepository = el('div', { class: 'empty', hidden: '' }, [t.noRepository]);
 
+	const heading = el('div', { class: 'heading' }, [el('label', { for: 'message' }, [t.message]), historyButton]);
+	const options = el('div', { class: 'options' }, [
+		el('label', {}, [amend, ' ', t.amend]),
+		el('label', {}, [signOff, ' ', t.signOff])
+	]);
+	const main = el('div', { class: 'main' }, [repositoryLine, banner, heading, message, hint, options, warning]);
+	// The footer with Author, Committer and the buttons always stays in sight; see fit().
 	const form = el('div', { class: 'form' }, [
-		repositoryLine,
-		banner,
-		el('div', { class: 'heading' }, [el('label', { for: 'message' }, [t.message]), historyButton]),
-		message,
-		hint,
-		el('div', { class: 'options' }, [
-			el('label', {}, [amend, ' ', t.amend]),
-			el('label', {}, [signOff, ' ', t.signOff])
-		]),
-		warning,
-		el('div', { class: 'people' }, [
-			el('label', { for: 'author' }, [t.author]), author,
-			el('label', { for: 'committer' }, [t.committer]), committer
-		]),
-		authorList,
-		committerList,
-		el('div', { class: 'buttons' }, [commitAndPush, commit])
+		main,
+		el('div', { class: 'footer' }, [
+			el('div', { class: 'people' }, [
+				el('label', { for: 'author' }, [t.author]), author,
+				el('label', { for: 'committer' }, [t.committer]), committer
+			]),
+			authorList,
+			committerList,
+			el('div', { class: 'buttons' }, [commitAndPush, commit])
+		])
 	]);
 	document.body.append(noRepository, form);
+
+	/**
+	 * The commit area never scrolls. When the view gets shorter, the message box gives up height first,
+	 * down to one line (see commit.css). If the main part still does not fit, these give way, least
+	 * needed first, and come back when there is room again.
+	 */
+	const squeezable = [repositoryLine, hint, heading, options, warning, banner];
+	function fit() {
+		for (const element of squeezable) {
+			element.classList.remove('squeezed');
+		}
+		for (const element of squeezable) {
+			if (main.scrollHeight <= main.clientHeight) {
+				break;
+			}
+			element.classList.add('squeezed');
+		}
+	}
+	new ResizeObserver(fit).observe(main);
 
 	/** @type {any} */
 	let state = { repository: undefined, operation: 'none', stagedCount: 0, authorDefault: '', committerDefault: '', authorHistory: [], committerHistory: [], signOffDefault: false };
@@ -103,6 +122,7 @@
 		commitAndPush.disabled = busy;
 		continueButton.disabled = busy;
 		abortButton.disabled = busy;
+		fit();
 	}
 
 	let draftTimer = /** @type {any} */ (undefined);

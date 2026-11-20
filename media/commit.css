@@ -1,7 +1,7 @@
 /*
- * The page fills the view, and the message box takes whatever height the rest leaves, down to one line.
- * So the author, committer and buttons stay in sight when the view gets shorter; below that, the page
- * scrolls.
+ * The page fills the view and never scrolls. The footer (Author, Committer and the buttons) keeps its
+ * height and stays at the bottom; the main part above it takes the rest. In the main part the message
+ * box gives up height first, down to one line; after that, commit.js hides the least needed parts.
  */
 html {
 	height: 100%;
@@ -14,28 +14,47 @@ body {
 	padding: 4px 12px 12px;
 	display: flex;
 	flex-direction: column;
+	overflow: hidden;
 	color: var(--vscode-foreground);
 	font-family: var(--vscode-font-family);
 	font-size: var(--vscode-font-size);
 	background: transparent;
 }
 
-[hidden] {
+[hidden],
+.squeezed {
 	display: none !important;
 }
 
 .form {
-	flex: 1 0 auto;
+	flex: 1 1 auto;
+	min-height: 0;
 	display: flex;
 	flex-direction: column;
 	gap: 6px;
 }
 
-.form > * {
+.form > .main {
+	flex: 1 1 0;
+	min-height: 0;
+	overflow: hidden;
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+}
+
+.form > .footer {
+	flex: none;
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+}
+
+.main > * {
 	flex: none;
 }
 
-.form > #message {
+.main > #message {
 	flex: 1 1 0;
 	/* One line: the line height, the padding and the border. */
 	min-height: calc(1.4em + 10px);

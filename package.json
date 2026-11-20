@@ -2,7 +2,7 @@
   "name": "git-index-editor",
   "displayName": "%displayName%",
   "description": "%description%",
-  "version": "0.3.4",
+  "version": "0.3.5",
   "publisher": "myilmaz",
   "license": "MIT",
   "icon": "images/icon.png",

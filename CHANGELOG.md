@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.5
+
+- The commit area never scrolls. Author, Committer and the buttons stay at the bottom. When the view
+  gets shorter, the message box shrinks to one line first; then the repository line, the summary hint,
+  the Commit Message heading and Amend/Sign-off give way in that order, and come back when there is room.
+
 ## 0.3.4
 
 - Fixed: the arrow did not save a block whose lines also differ in leading or trailing whitespace. The
