@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.3
+
+- The commit area keeps Author, Committer and the buttons in sight when the view gets shorter: the
+  message box takes the height the rest leaves, down to one line, and only below that does the view
+  scroll.
+
 ## 0.3.2
 
 - Fixed: clicking the arrow in the diff gutter left the block unsaved. The arrow edits only the

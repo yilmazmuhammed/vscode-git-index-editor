@@ -29,7 +29,7 @@
 	const banner = el('div', { class: 'banner', hidden: '' }, [bannerText, el('div', { class: 'actions' }, [continueButton, abortButton])]);
 
 	const historyButton = el('button', { type: 'button', class: 'link', title: t.previous }, [t.previous]);
-	const message = el('textarea', { id: 'message', rows: '6', placeholder: t.placeholder, spellcheck: 'true' });
+	const message = el('textarea', { id: 'message', rows: '1', placeholder: t.placeholder, spellcheck: 'true' });
 	const hint = el('div', { class: 'hint' });
 	const warning = el('div', { class: 'warning', hidden: '' });
 
